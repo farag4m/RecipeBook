@@ -94,7 +94,6 @@
   .hint{font-size:11.5px;color:var(--ink-soft);margin-top:4px;text-transform:none;font-family:'Comic Neue';letter-spacing:0;}
   .tool-box{background:#FFF0B8;border:3px dashed var(--ink);border-radius:10px;padding:16px;margin-bottom:6px;}
   .share-link{word-break:break-all;background:#fff;border:2px solid var(--ink);border-radius:8px;padding:10px;font-size:12px;margin-top:10px;}
-  .status-line{font-size:12px;color:var(--ink-soft);margin-top:10px;line-height:1.45;}
   .error-msg{color:var(--rule-red);font-size:13px;font-weight:700;margin-top:8px;}
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--pop);color:#fff;border:3px solid var(--ink);border-radius:10px;padding:12px 20px;font-family:'Bangers';font-size:16px;letter-spacing:.02em;box-shadow:4px 4px 0 var(--ink);opacity:0;transition:opacity .25s ease, transform .25s ease;z-index:100;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -118,7 +117,6 @@
     <div class="header-actions">
       <button class="btn-ai" id="btnFormat">Format Paste</button>
       <button class="btn-ghost" id="btnImport">Import</button>
-      <button class="btn-ghost" id="btnBackup">Backup</button>
       <button class="btn-primary" id="btnAdd">+ Add Recipe</button>
     </div>
   </div>
@@ -139,11 +137,6 @@
 const CATEGORIES = ["Breakfast","Mains","Sides","Desserts","Drinks","Snacks","Other"];
 const CAT_ICON = {Breakfast:"🍳",Mains:"🍝",Sides:"🥗",Desserts:"🍰",Drinks:"🥤",Snacks:"🍿",Other:"⭐"};
 const STORAGE_KEY = "family-recipe-box:v1";
-const BACKUP_URL_KEY = "family-recipe-box:backup-url";
-const BACKUP_LAST_TRY_KEY = "family-recipe-box:backup-last-try";
-const BACKUP_LAST_ACCEPTED_KEY = "family-recipe-box:backup-last-accepted";
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 let recipes = [];
 let activeCat = "All";
 let searchTerm = "";
@@ -174,7 +167,6 @@ function saveRecipes(shouldRender = true){
     lastError = "Could not save recipes. Browser storage may be full or disabled.";
   }
   if(shouldRender) render();
-  attemptBackup(false);
   return !lastError;
 }
 
@@ -258,104 +250,6 @@ function showToast(msg){
   document.body.appendChild(t);
   setTimeout(() => t.classList.add("show"), 10);
   setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 2400);
-}
-
-function getBackupUrl(){
-  return localStorage.getItem(BACKUP_URL_KEY) || "";
-}
-
-function formatDate(value){
-  if(!value) return "Never";
-  return new Date(Number(value)).toLocaleString();
-}
-
-async function attemptBackup(force){
-  const backupUrl = getBackupUrl().trim();
-  if(!backupUrl || recipes.length === 0) return false;
-
-  const now = Date.now();
-  const lastTry = Number(localStorage.getItem(BACKUP_LAST_TRY_KEY) || 0);
-  const lastAccepted = Number(localStorage.getItem(BACKUP_LAST_ACCEPTED_KEY) || 0);
-  if(!force && now - lastAccepted < WEEK_MS) return false;
-  if(!force && now - lastTry < DAY_MS) return false;
-
-  localStorage.setItem(BACKUP_LAST_TRY_KEY, String(now));
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  const payload = {
-    backedUpAt:new Date(now).toISOString(),
-    recipeCount:recipes.length,
-    recipes
-  };
-
-  try{
-    await fetch(backupUrl, {
-      method:"POST",
-      mode:"no-cors",
-      headers:{"Content-Type":"text/plain;charset=UTF-8"},
-      body:JSON.stringify(payload),
-      signal:controller.signal
-    });
-    localStorage.setItem(BACKUP_LAST_ACCEPTED_KEY, String(now));
-    return true;
-  }catch(e){
-    return false;
-  }finally{
-    clearTimeout(timeout);
-  }
-}
-
-function openBackupSettings(){
-  const overlay = document.createElement("div");
-  overlay.className = "overlay";
-  overlay.innerHTML = `
-    <div class="modal wide">
-      <button class="modal-close">&times;</button>
-      <h2>Backup</h2>
-      <div class="rule"></div>
-      <div class="tool-box">
-        <label style="margin-top:0">Backup URL</label>
-        <input type="text" id="backup-url" value="${escapeHtml(getBackupUrl())}" placeholder="https://your-laptop-backup-endpoint.example/recipes">
-        <div class="hint">Optional. The site tries this in the background when a weekly backup is due, and retries at most once per day until the browser can send it.</div>
-        <div class="status-line">
-          Last try: ${escapeHtml(formatDate(localStorage.getItem(BACKUP_LAST_TRY_KEY)))}<br>
-          Last browser-accepted send: ${escapeHtml(formatDate(localStorage.getItem(BACKUP_LAST_ACCEPTED_KEY)))}
-        </div>
-        <div class="modal-actions">
-          <button class="btn-primary" id="backup-save">Save</button>
-          <button class="btn-ai" id="backup-now">Try Now</button>
-          <button class="btn-danger" id="backup-clear">Turn Off</button>
-        </div>
-        <div id="backup-status"></div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  const urlInput = overlay.querySelector("#backup-url");
-  const status = overlay.querySelector("#backup-status");
-  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
-  overlay.querySelector("#backup-save").onclick = () => {
-    localStorage.setItem(BACKUP_URL_KEY, urlInput.value.trim());
-    showToast("Backup setting saved");
-    overlay.remove();
-  };
-  overlay.querySelector("#backup-clear").onclick = () => {
-    localStorage.removeItem(BACKUP_URL_KEY);
-    showToast("Backup turned off");
-    overlay.remove();
-  };
-  overlay.querySelector("#backup-now").onclick = async () => {
-    localStorage.setItem(BACKUP_URL_KEY, urlInput.value.trim());
-    if(!getBackupUrl()){
-      status.innerHTML = `<div class="error-msg">Enter a backup URL first.</div>`;
-      return;
-    }
-    status.innerHTML = `<div class="status-line">Trying backup now...</div>`;
-    const sent = await attemptBackup(true);
-    status.innerHTML = sent
-      ? `<div class="status-line">The browser accepted the backup request. Your laptop endpoint still needs to save the posted JSON.</div>`
-      : `<div class="error-msg">Backup request failed. The laptop may be off, unreachable, or blocked by browser security.</div>`;
-  };
 }
 
 function makeRecipeShareUrl(recipe){
@@ -625,12 +519,10 @@ document.getElementById("search").addEventListener("input", e => { searchTerm = 
 document.getElementById("btnAdd").onclick = () => openForm(null);
 document.getElementById("btnFormat").onclick = openFormatPaste;
 document.getElementById("btnImport").onclick = openImport;
-document.getElementById("btnBackup").onclick = openBackupSettings;
 document.getElementById("btnExport").onclick = exportBox;
 
 loadRecipes();
 importSharedRecipeFromHash();
-attemptBackup(false);
 </script>
 </body>
 </html>
