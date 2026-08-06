@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Family Recipe Box</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FFF4DC;
+    --paper-raised:#FFFFFF;
+    --ink:#171512;
+    --ink-soft:#4A453D;
+    --rule-red:#EE3E36;
+    --sage:#2F6FED;
+    --sage-deep:#1E4FB8;
+    --butter:#FFCC29;
+    --line:#171512;
+    --pop:#3FB84F;
+    --shadow:4px 4px 0 var(--ink);
+    --shadow-sm:3px 3px 0 var(--ink);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Comic Neue', sans-serif;
+    font-weight:700;
+    background-image:radial-gradient(circle, rgba(23,21,18,0.14) 1.6px, transparent 1.6px);
+    background-size:16px 16px;
+  }
+  .app{max-width:1180px;margin:0 auto;padding:28px 20px 80px;}
+  .header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;border-bottom:5px solid var(--ink);padding-bottom:18px;margin-bottom:26px;}
+  .header h1{font-family:'Bangers', cursive;font-weight:400;font-size:56px;margin:0;letter-spacing:.02em;color:var(--rule-red);text-shadow:3px 3px 0 var(--ink);transform:rotate(-1.5deg);}
+  .header .sub{font-size:13px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;margin-top:8px;}
+  .err-banner{color:var(--rule-red);text-transform:none;letter-spacing:0;}
+  .header-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  button{font-family:'Bangers', cursive;letter-spacing:.03em;cursor:pointer;border:3px solid var(--ink);border-radius:8px;font-size:16px;font-weight:400;padding:10px 18px;box-shadow:var(--shadow-sm);transition:transform .1s ease, box-shadow .1s ease;}
+  button:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--ink);}
+  button:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink);}
+  button:disabled{opacity:.55;cursor:not-allowed;transform:none;}
+  .btn-primary{background:var(--sage);color:#fff;}
+  .btn-ai{background:var(--butter);color:var(--ink);}
+  .btn-ghost{background:var(--paper-raised);color:var(--ink);}
+  .btn-danger{background:var(--rule-red);color:#fff;}
+  .btn-small{padding:7px 12px;font-size:13px;}
+  .layout{display:flex;gap:26px;align-items:flex-start;}
+  .tabs{display:flex;flex-direction:column;gap:8px;min-width:140px;position:sticky;top:20px;}
+  .tab{font-family:'Bangers', cursive;letter-spacing:.03em;font-size:15px;text-transform:uppercase;padding:9px 12px;border:3px solid var(--ink);background:var(--paper-raised);cursor:pointer;color:var(--ink-soft);border-radius:8px;box-shadow:3px 3px 0 var(--ink);transition:transform .1s ease;}
+  .tab:hover{transform:translate(-1px,-1px);}
+  .tab.active{background:var(--rule-red);color:#fff;}
+  .tab .count{opacity:.75;margin-left:3px;}
+  .tab-icon{font-size:20px;vertical-align:middle;}
+  .main{flex:1;min-width:0;}
+  .search-row{display:grid;grid-template-columns:1fr auto;gap:12px;margin-bottom:18px;}
+  .search{width:100%;padding:11px 14px;border:3px solid var(--ink);border-radius:8px;font-family:'Comic Neue';font-weight:700;font-size:14px;background:var(--paper-raised);box-shadow:var(--shadow-sm);}
+  .search:focus{outline:none;border-color:var(--sage);}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(230px,1fr));gap:22px;}
+  .card{background:var(--paper-raised);border:3px solid var(--ink);border-radius:10px;box-shadow:var(--shadow);padding:20px 16px 16px;position:relative;cursor:pointer;display:flex;flex-direction:column;min-height:155px;transition:transform .12s ease, box-shadow .12s ease;}
+  .card:hover{transform:translate(-3px,-3px) rotate(-0.6deg);box-shadow:7px 7px 0 var(--ink);}
+  .card-icon{font-size:44px;line-height:1;margin-bottom:8px;transform:rotate(-3deg);}
+  .card h3{font-family:'Bangers', cursive;font-weight:400;font-size:22px;margin:0;line-height:1.15;letter-spacing:.02em;}
+  .card .meta{margin-top:auto;padding-top:12px;font-size:12px;color:var(--ink-soft);display:flex;justify-content:space-between;gap:8px;}
+  .empty{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--ink-soft);}
+  .empty b{display:block;font-family:'Bangers';font-weight:400;font-size:30px;color:var(--rule-red);margin-bottom:8px;letter-spacing:.03em;}
+  .overlay{position:fixed;inset:0;background:rgba(23,21,18,0.6);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50;}
+  .modal{background:var(--paper-raised);width:100%;max-width:560px;max-height:86vh;overflow-y:auto;border-radius:12px;border:4px solid var(--ink);box-shadow:8px 8px 0 var(--ink);padding:26px 28px 24px;position:relative;}
+  .modal.wide{max-width:720px;}
+  .modal-close{position:absolute;top:12px;right:14px;background:var(--rule-red);color:#fff;border:2.5px solid var(--ink);border-radius:50%;width:30px;height:30px;font-size:18px;line-height:1;padding:0;box-shadow:2px 2px 0 var(--ink);}
+  .modal h2{font-family:'Bangers', cursive;font-weight:400;font-size:32px;margin:0 0 6px;padding-right:20px;letter-spacing:.02em;}
+  .modal .rule{height:4px;background:var(--rule-red);margin:14px 0;border-radius:2px;}
+  .modal .field-label{font-family:'Bangers', cursive;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--sage-deep);margin:16px 0 8px;}
+  .modal-icon{font-size:56px;line-height:1;transform:rotate(-3deg);}
+  .ing-grid{display:flex;flex-wrap:wrap;gap:8px;}
+  .ing-chip{display:flex;align-items:center;gap:6px;background:var(--paper);border:2.5px solid var(--ink);border-radius:20px;padding:6px 12px;font-size:13px;box-shadow:2px 2px 0 var(--ink);}
+  .ing-emoji{font-size:18px;}
+  .step-list{display:flex;flex-direction:column;gap:10px;}
+  .step-row{display:flex;align-items:flex-start;gap:10px;background:var(--paper);border:2.5px solid var(--ink);border-radius:10px;padding:9px 12px;font-size:13.5px;box-shadow:2px 2px 0 var(--ink);}
+  .step-num{flex-shrink:0;background:var(--rule-red);color:#fff;border:2px solid var(--ink);border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-family:'Bangers';font-size:14px;}
+  .step-emoji{font-size:18px;flex-shrink:0;}
+  .modal .notes{color:var(--ink);font-size:13.5px;line-height:1.5;background:#FFF0B8;border:2px dashed var(--ink);padding:10px 12px;border-radius:8px;margin-top:14px;}
+  .modal .footer-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:20px;font-size:12.5px;color:var(--ink-soft);}
+  .modal-actions{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;}
+  .confirm-row{display:flex;align-items:center;gap:8px;font-size:13.5px;flex-wrap:wrap;}
+  label{display:block;font-family:'Bangers', cursive;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);margin:14px 0 6px;}
+  label:first-child{margin-top:0;}
+  input[type=text], select, textarea{width:100%;padding:9px 11px;border:2.5px solid var(--ink);border-radius:6px;font-family:'Comic Neue';font-weight:700;font-size:14px;background:#fff;color:var(--ink);}
+  textarea{font-size:13.5px;line-height:1.6;resize:vertical;}
+  input:focus, select:focus, textarea:focus{outline:none;border-color:var(--sage);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .hint{font-size:11.5px;color:var(--ink-soft);margin-top:4px;text-transform:none;font-family:'Comic Neue';letter-spacing:0;}
+  .tool-box{background:#FFF0B8;border:3px dashed var(--ink);border-radius:10px;padding:16px;margin-bottom:6px;}
+  .share-link{word-break:break-all;background:#fff;border:2px solid var(--ink);border-radius:8px;padding:10px;font-size:12px;margin-top:10px;}
+  .error-msg{color:var(--rule-red);font-size:13px;font-weight:700;margin-top:8px;}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--pop);color:#fff;border:3px solid var(--ink);border-radius:10px;padding:12px 20px;font-family:'Bangers';font-size:16px;letter-spacing:.02em;box-shadow:4px 4px 0 var(--ink);opacity:0;transition:opacity .25s ease, transform .25s ease;z-index:100;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  @media (max-width:760px){
+    .layout{flex-direction:column;}
+    .tabs{flex-direction:row;flex-wrap:wrap;position:static;width:100%;min-width:0;}
+    .header h1{font-size:40px;}
+    .search-row{grid-template-columns:1fr;}
+    .row2{grid-template-columns:1fr;}
+    .modal{padding:24px 18px 20px;}
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="header">
+    <div>
+      <h1>The Family Recipe Box</h1>
+      <div class="sub" id="subcount">loading recipes...</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-ai" id="btnFormat">Format Paste</button>
+      <button class="btn-ghost" id="btnImport">Import</button>
+      <button class="btn-primary" id="btnAdd">+ Add Recipe</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="tabs" id="tabs"></div>
+    <main class="main">
+      <div class="search-row">
+        <input class="search" id="search" type="text" placeholder="Search recipes by name...">
+        <button class="btn-ghost" id="btnExport">Export Box</button>
+      </div>
+      <div class="grid" id="grid"></div>
+    </main>
+  </div>
+</div>
+
+<script>
+const CATEGORIES = ["Breakfast","Mains","Sides","Desserts","Drinks","Snacks","Other"];
+const CAT_ICON = {Breakfast:"🍳",Mains:"🍝",Sides:"🥗",Desserts:"🍰",Drinks:"🥤",Snacks:"🍿",Other:"⭐"};
+const STORAGE_KEY = "family-recipe-box:v1";
+let recipes = [];
+let activeCat = "All";
+let searchTerm = "";
+let lastError = "";
+
+const grid = document.getElementById("grid");
+const tabsEl = document.getElementById("tabs");
+const subcount = document.getElementById("subcount");
+
+function loadRecipes(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    recipes = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(recipes)) recipes = [];
+    lastError = "";
+  }catch(e){
+    recipes = [];
+    lastError = "Could not load saved recipes. Browser storage may be unavailable.";
+  }
+  render();
+}
+
+function saveRecipes(shouldRender = true){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(recipes));
+    lastError = "";
+  }catch(e){
+    lastError = "Could not save recipes. Browser storage may be full or disabled.";
+  }
+  if(shouldRender) render();
+  return !lastError;
+}
+
+function uid(){ return "r" + Date.now() + Math.random().toString(36).slice(2,7); }
+function escapeHtml(s){ return String(s || "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+function normalizeRecipe(r){
+  return {
+    id:r.id || uid(),
+    title:String(r.title || "Untitled Recipe").trim() || "Untitled Recipe",
+    category:CATEGORIES.includes(r.category) ? r.category : "Other",
+    servings:String(r.servings || "").trim(),
+    contributor:String(r.contributor || "").trim(),
+    ingredients:Array.isArray(r.ingredients) ? r.ingredients.map(String).filter(Boolean) : [],
+    steps:Array.isArray(r.steps) ? r.steps.map(String).filter(Boolean) : [],
+    notes:String(r.notes || "").trim()
+  };
+}
+
+const ING_ICONS = [
+  [/egg/i,"🥚"],[/flour/i,"🌾"],[/sugar/i,"🍬"],[/butter/i,"🧈"],[/milk|cream/i,"🥛"],
+  [/cheese/i,"🧀"],[/chicken/i,"🍗"],[/beef|steak/i,"🥩"],[/pork|bacon/i,"🥓"],[/fish|salmon|shrimp/i,"🐟"],
+  [/garlic/i,"🧄"],[/onion/i,"🧅"],[/tomato/i,"🍅"],[/potato/i,"🥔"],[/carrot/i,"🥕"],
+  [/pepper(?!corn)/i,"🌶️"],[/salt/i,"🧂"],[/oil/i,"🫒"],[/lemon|lime/i,"🍋"],[/rice/i,"🍚"],
+  [/pasta|noodle/i,"🍝"],[/bread/i,"🍞"],[/chocolate/i,"🍫"],[/apple/i,"🍎"],[/banana/i,"🍌"],
+  [/herb|basil|parsley|cilantro|mint/i,"🌿"],[/water/i,"💧"],[/wine/i,"🍷"],[/vanilla/i,"🌼"],[/nut|almond|peanut/i,"🥜"]
+];
+function guessIcon(text){
+  for(const [re, emo] of ING_ICONS) if(re.test(text)) return emo;
+  return "🔸";
+}
+const STEP_ICONS = [
+  [/whisk|beat|mix|stir|combine/i,"🥄"],[/chop|dice|slice|mince/i,"🔪"],[/bake|oven/i,"🔥"],
+  [/boil|simmer/i,"♨️"],[/fry|sauté|saute/i,"🍳"],[/grill/i,"🍢"],[/cool|chill|fridge|freeze/i,"❄️"],
+  [/serve|plate/i,"🍽️"],[/marinate|rest|wait/i,"⏱️"],[/preheat/i,"🌡️"]
+];
+function guessStepIcon(text){
+  for(const [re, emo] of STEP_ICONS) if(re.test(text)) return emo;
+  return "👉";
+}
+
+function render(){
+  const counts = {};
+  CATEGORIES.forEach(c => counts[c] = 0);
+  recipes.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1; });
+  tabsEl.innerHTML = ["All", ...CATEGORIES].map(c => {
+    const n = c === "All" ? recipes.length : (counts[c] || 0);
+    const icon = c === "All" ? "🍽️" : CAT_ICON[c];
+    return `<div class="tab ${activeCat === c ? "active" : ""}" data-cat="${c}"><span class="tab-icon">${icon}</span> <span class="count">${n}</span></div>`;
+  }).join("");
+  tabsEl.querySelectorAll(".tab").forEach(t => t.onclick = () => { activeCat = t.dataset.cat; render(); });
+
+  let filtered = recipes.filter(r => activeCat === "All" || r.category === activeCat);
+  if(searchTerm.trim()){
+    const q = searchTerm.toLowerCase();
+    filtered = filtered.filter(r => r.title.toLowerCase().includes(q));
+  }
+
+  subcount.innerHTML = lastError
+    ? `<span class="err-banner">⚠️ ${escapeHtml(lastError)}</span>`
+    : `${recipes.length} recipe${recipes.length === 1 ? "" : "s"} saved in this browser`;
+
+  if(filtered.length === 0){
+    grid.innerHTML = `<div class="empty"><b>Nothing here yet</b>${recipes.length === 0 ? "Add your first family recipe to start the box." : "No recipes match this view."}</div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(r => `
+    <div class="card" data-id="${escapeHtml(r.id)}">
+      <div class="card-icon">${CAT_ICON[r.category] || "⭐"}</div>
+      <h3>${escapeHtml(r.title)}</h3>
+      <div class="meta"><span>${r.servings ? "🍽️ " + escapeHtml(r.servings) : ""}</span><span>${r.contributor ? "👤 " + escapeHtml(r.contributor) : ""}</span></div>
+    </div>
+  `).join("");
+  grid.querySelectorAll(".card").forEach(c => c.onclick = () => openView(c.dataset.id));
+}
+
+function showToast(msg){
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add("show"), 10);
+  setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 2400);
+}
+
+function makeRecipeShareUrl(recipe){
+  const payload = btoa(unescape(encodeURIComponent(JSON.stringify(normalizeRecipe(recipe)))));
+  const url = new URL(location.href);
+  url.hash = "recipe=" + payload;
+  return url.toString();
+}
+
+function importSharedRecipeFromHash(){
+  if(!location.hash.startsWith("#recipe=")) return;
+  try{
+    const json = decodeURIComponent(escape(atob(location.hash.slice(8))));
+    const incoming = normalizeRecipe(JSON.parse(json));
+    const exists = recipes.some(r => r.title === incoming.title && JSON.stringify(r.ingredients) === JSON.stringify(incoming.ingredients));
+    if(!exists){
+      incoming.id = uid();
+      recipes.push(incoming);
+      saveRecipes(false);
+      showToast(`Imported "${incoming.title}"`);
+    }
+    history.replaceState(null, "", location.pathname + location.search);
+    render();
+  }catch(e){
+    lastError = "That shared recipe link could not be read.";
+    render();
+  }
+}
+
+async function shareRecipe(recipe){
+  const url = makeRecipeShareUrl(recipe);
+  const text = `${recipe.title}\n\nOpen this link to add it to The Family Recipe Box:\n${url}`;
+  if(navigator.share){
+    try{
+      await navigator.share({title:recipe.title, text, url});
+      return;
+    }catch(e){
+      if(e.name === "AbortError") return;
+    }
+  }
+  await navigator.clipboard.writeText(text);
+  showToast("Share link copied");
+}
+
+function openView(id){
+  const r = recipes.find(x => x.id === id);
+  if(!r) return;
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="modal">
+      <button class="modal-close">&times;</button>
+      <div class="modal-icon">${CAT_ICON[r.category] || "⭐"}</div>
+      <h2>${escapeHtml(r.title)}</h2>
+      <div class="rule"></div>
+      <div class="field-label">Ingredients</div>
+      <div class="ing-grid">${r.ingredients.map(i => `<div class="ing-chip"><span class="ing-emoji">${guessIcon(i)}</span>${escapeHtml(i)}</div>`).join("")}</div>
+      <div class="field-label">Steps</div>
+      <div class="step-list">${r.steps.map((s, idx) => `<div class="step-row"><span class="step-num">${idx + 1}</span><span class="step-emoji">${guessStepIcon(s)}</span><span>${escapeHtml(s)}</span></div>`).join("")}</div>
+      ${r.notes ? `<div class="notes">${escapeHtml(r.notes)}</div>` : ""}
+      <div class="footer-row">
+        <span>${r.servings ? "Serves " + escapeHtml(r.servings) : ""}</span>
+        <span>${r.contributor ? "From " + escapeHtml(r.contributor) : ""}</span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-primary btn-small" id="shareBtn">Share</button>
+        <button class="btn-ghost btn-small" id="editBtn">Edit</button>
+        <button class="btn-danger btn-small" id="delBtn">Delete</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
+  overlay.onclick = e => { if(e.target === overlay) overlay.remove(); };
+  overlay.querySelector("#shareBtn").onclick = () => shareRecipe(r);
+  overlay.querySelector("#editBtn").onclick = () => { overlay.remove(); openForm(r); };
+  const delBtn = overlay.querySelector("#delBtn");
+  delBtn.onclick = () => {
+    delBtn.outerHTML = `<span class="confirm-row">Delete for good? <button class="btn-danger btn-small" id="delYes">Yes, delete</button> <button class="btn-ghost btn-small" id="delNo">Cancel</button></span>`;
+    overlay.querySelector("#delNo").onclick = () => { overlay.remove(); openView(r.id); };
+    overlay.querySelector("#delYes").onclick = () => {
+      recipes = recipes.filter(x => x.id !== r.id);
+      saveRecipes();
+      overlay.remove();
+      if(!lastError) showToast(`Deleted "${r.title}"`);
+    };
+  };
+}
+
+function openForm(existing, prefill){
+  const data = existing || prefill || {title:"", category:"Mains", servings:"", contributor:"", ingredients:[], steps:[], notes:""};
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="modal wide">
+      <button class="modal-close">&times;</button>
+      <h2>${existing ? "Edit Recipe" : "New Recipe"}</h2>
+      <div class="rule"></div>
+      <label>Title</label>
+      <input type="text" id="f-title" value="${escapeHtml(data.title)}" placeholder="e.g. Grandma's Sunday Sauce">
+      <div class="row2">
+        <div>
+          <label>Category</label>
+          <select id="f-cat">${CATEGORIES.map(c => `<option ${data.category === c ? "selected" : ""}>${c}</option>`).join("")}</select>
+        </div>
+        <div>
+          <label>Servings</label>
+          <input type="text" id="f-servings" value="${escapeHtml(data.servings)}" placeholder="e.g. 4-6">
+        </div>
+      </div>
+      <label>Added by</label>
+      <input type="text" id="f-contributor" value="${escapeHtml(data.contributor)}" placeholder="e.g. Aunt Rosa">
+      <label>Ingredients <span class="hint">- one per line</span></label>
+      <textarea id="f-ingredients" rows="6">${escapeHtml((data.ingredients || []).join("\n"))}</textarea>
+      <label>Steps <span class="hint">- one per line</span></label>
+      <textarea id="f-steps" rows="6">${escapeHtml((data.steps || []).join("\n"))}</textarea>
+      <label>Notes <span class="hint">- optional</span></label>
+      <textarea id="f-notes" rows="2">${escapeHtml(data.notes || "")}</textarea>
+      <div class="modal-actions">
+        <button class="btn-primary" id="saveBtn">Save Recipe</button>
+        <button class="btn-ghost" id="cancelBtn">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
+  overlay.querySelector("#cancelBtn").onclick = () => overlay.remove();
+  overlay.querySelector("#saveBtn").onclick = () => {
+    const titleField = overlay.querySelector("#f-title");
+    const title = titleField.value.trim();
+    let titleErr = overlay.querySelector("#title-err");
+    if(!title){
+      if(!titleErr){
+        titleErr = document.createElement("div");
+        titleErr.id = "title-err";
+        titleErr.className = "error-msg";
+        titleErr.textContent = "Please give the recipe a title.";
+        titleField.insertAdjacentElement("afterend", titleErr);
+      }
+      titleField.focus();
+      return;
+    }
+    if(titleErr) titleErr.remove();
+    const rec = normalizeRecipe({
+      id:existing ? existing.id : uid(),
+      title,
+      category:overlay.querySelector("#f-cat").value,
+      servings:overlay.querySelector("#f-servings").value.trim(),
+      contributor:overlay.querySelector("#f-contributor").value.trim(),
+      ingredients:overlay.querySelector("#f-ingredients").value.split("\n").map(s => s.trim()).filter(Boolean),
+      steps:overlay.querySelector("#f-steps").value.split("\n").map(s => s.trim()).filter(Boolean),
+      notes:overlay.querySelector("#f-notes").value.trim()
+    });
+    recipes = existing ? recipes.map(r => r.id === existing.id ? rec : r) : [...recipes, rec];
+    saveRecipes();
+    overlay.remove();
+    if(!lastError) showToast(`Saved "${rec.title}"`);
+  };
+}
+
+function parseRecipeText(raw){
+  const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const recipe = {title:lines[0] || "Untitled Recipe", category:"Other", servings:"", contributor:"", ingredients:[], steps:[], notes:""};
+  let section = "ingredients";
+  for(const line of lines.slice(1)){
+    const lower = line.toLowerCase().replace(/:$/, "");
+    if(CATEGORIES.map(c => c.toLowerCase()).includes(lower)){ recipe.category = CATEGORIES.find(c => c.toLowerCase() === lower); continue; }
+    if(/^serv(es|ings?)\b/i.test(line)){ recipe.servings = line.replace(/^serv(es|ings?)\s*:?\s*/i, ""); continue; }
+    if(/^from\b|^by\b/i.test(line)){ recipe.contributor = line.replace(/^(from|by)\s*:?\s*/i, ""); continue; }
+    if(/ingredient/i.test(lower)){ section = "ingredients"; continue; }
+    if(/instruction|direction|method|step/i.test(lower)){ section = "steps"; continue; }
+    if(/note/i.test(lower)){ section = "notes"; continue; }
+    const cleaned = line.replace(/^[-*•]\s*/, "").replace(/^\d+[.)]\s*/, "");
+    if(section === "steps") recipe.steps.push(cleaned);
+    else if(section === "notes") recipe.notes += (recipe.notes ? " " : "") + cleaned;
+    else recipe.ingredients.push(cleaned);
+  }
+  return normalizeRecipe(recipe);
+}
+
+function openFormatPaste(){
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="modal wide">
+      <button class="modal-close">&times;</button>
+      <h2>Format Paste</h2>
+      <div class="rule"></div>
+      <div class="tool-box">
+        <label style="margin-top:0">Paste recipe text</label>
+        <textarea id="paste-input" rows="10" placeholder="First line becomes the title. Use Ingredients, Steps, Notes, Servings, or From headings when you have them."></textarea>
+        <button class="btn-ai" id="format-run" style="margin-top:12px;width:100%;">Format into a recipe card</button>
+        <div class="hint">This works fully in the browser. Photo reading and hosted AI need a server or exposed API key, so they are intentionally left out.</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
+  overlay.querySelector("#format-run").onclick = () => {
+    const text = overlay.querySelector("#paste-input").value.trim();
+    if(!text) return;
+    const parsed = parseRecipeText(text);
+    overlay.remove();
+    openForm(null, parsed);
+  };
+}
+
+function openImport(){
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="modal wide">
+      <button class="modal-close">&times;</button>
+      <h2>Import Recipes</h2>
+      <div class="rule"></div>
+      <div class="tool-box">
+        <label style="margin-top:0">Paste exported JSON</label>
+        <textarea id="import-input" rows="8" placeholder='Paste a recipe or recipe box JSON export here.'></textarea>
+        <div class="modal-actions">
+          <button class="btn-primary" id="import-run">Import</button>
+          <button class="btn-ghost" id="import-file">Choose File</button>
+          <input type="file" id="file-input" accept="application/json,.json" hidden>
+        </div>
+        <div id="import-status"></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const input = overlay.querySelector("#import-input");
+  const fileInput = overlay.querySelector("#file-input");
+  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
+  overlay.querySelector("#import-file").onclick = () => fileInput.click();
+  fileInput.onchange = () => {
+    const file = fileInput.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { input.value = reader.result; };
+    reader.readAsText(file);
+  };
+  overlay.querySelector("#import-run").onclick = () => {
+    try{
+      const parsed = JSON.parse(input.value);
+      const incoming = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.recipes) ? parsed.recipes : [parsed]);
+      const normalized = incoming.map(normalizeRecipe);
+      recipes = [...recipes, ...normalized.map(r => ({...r, id:uid()}))];
+      saveRecipes();
+      overlay.remove();
+      showToast(`Imported ${normalized.length} recipe${normalized.length === 1 ? "" : "s"}`);
+    }catch(e){
+      overlay.querySelector("#import-status").innerHTML = `<div class="error-msg">Could not read that JSON export.</div>`;
+    }
+  };
+}
+
+function exportBox(){
+  const blob = new Blob([JSON.stringify({recipes}, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "family-recipe-box.json";
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(a.href);
+  a.remove();
+}
+
+document.getElementById("search").addEventListener("input", e => { searchTerm = e.target.value; render(); });
+document.getElementById("btnAdd").onclick = () => openForm(null);
+document.getElementById("btnFormat").onclick = openFormatPaste;
+document.getElementById("btnImport").onclick = openImport;
+document.getElementById("btnExport").onclick = exportBox;
+
+loadRecipes();
+importSharedRecipeFromHash();
+</script>
+</body>
+</html>
