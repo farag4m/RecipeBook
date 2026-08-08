@@ -85,6 +85,7 @@
   .step-header{display:flex;align-items:center;gap:14px;margin-bottom:12px;}
   .step-number-big{width:48px;height:48px;background:var(--rule-red);border:3px solid var(--ink);border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Bangers';font-size:24px;flex-shrink:0;}
   .step-title{font-family:'Bangers';font-size:23px;line-height:1.1;letter-spacing:.02em;color:var(--ink);}
+  .step-caption{font-size:13.5px;line-height:1.45;color:var(--ink-soft);margin:0 0 12px 66px;}
   .step-card img{display:block;width:100%;border:3px solid var(--ink);border-radius:12px;background:#fff;}
   .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;}
   .photo-card{background:var(--paper-raised);border:3px solid var(--ink);border-radius:10px;box-shadow:var(--shadow-sm);padding:10px;min-height:170px;}
@@ -134,6 +135,8 @@
     </div>
     <div class="header-actions">
       <button class="btn-ai" id="btnFormat">Format Paste</button>
+      <button class="btn-ghost" id="btnJsonFormat">JSON Format</button>
+      <button class="btn-ghost" id="btnAddJson">Add JSON</button>
       <button class="btn-ghost" id="btnImport">Import</button>
       <button class="btn-ghost" id="btnSync">Sync</button>
       <button class="btn-ghost" id="btnSettings">GitHub</button>
@@ -186,20 +189,91 @@ function slugify(s){
     .replace(/^-+|-+$/g, "")
     .slice(0, 70) || "recipe";
 }
+
+function ingredientText(item){
+  if(typeof item === "string") return item.trim();
+  if(!item || typeof item !== "object") return "";
+  if(item.text) return String(item.text).trim();
+  const parts = [item.quantity, item.unit, item.name || item.ingredient].map(value => String(value || "").trim()).filter(Boolean);
+  const note = String(item.note || item.notes || "").trim();
+  return (parts.join(" ") + (note ? ` (${note})` : "")).trim();
+}
+
+function stepText(item){
+  if(typeof item === "string") return item.trim();
+  if(!item || typeof item !== "object") return "";
+  return String(item.text || item.instruction || item.description || item.title || "").trim();
+}
+
+function stepTitle(item){
+  if(typeof item === "string") return item.trim();
+  if(!item || typeof item !== "object") return "";
+  return String(item.title || item.name || item.text || item.instruction || item.description || "").trim();
+}
+
+function normalizePhotoRef(photo){
+  if(!photo) return null;
+  if(typeof photo === "string"){
+    const path = photo.trim();
+    if(!path) return null;
+    const file = path.split("/").pop();
+    return {path, name:file.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ")};
+  }
+  if(typeof photo !== "object") return null;
+  const path = String(photo.path || photo.src || photo.url || "").trim();
+  if(!path) return null;
+  const file = path.split("/").pop();
+  return {
+    path,
+    name:String(photo.name || photo.alt || file.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ")).trim()
+  };
+}
+
+function stepPhoto(item, fallback){
+  if(item && typeof item === "object"){
+    return normalizePhotoRef(item.image || item.photo || item.picture || item.stepPhoto || item.photoPath || item.imagePath);
+  }
+  return normalizePhotoRef(fallback);
+}
+
+function ingredientStepEntries(item){
+  if(!item || typeof item !== "object") return [];
+  const fallbackPhoto = normalizePhotoRef(item.image || item.photo || item.picture);
+  const source = item.step || item.steps;
+  const rawSteps = Array.isArray(source) ? source : (source ? [source] : []);
+  return rawSteps.map(rawStep => ({rawStep, fallbackPhoto}));
+}
+
+function recipeStepEntries(rawIngredients, rawSteps, rawStepPhotos){
+  const ingredientEntries = rawIngredients.flatMap(ingredientStepEntries);
+  const topLevelEntries = rawSteps.map((rawStep, idx) => ({rawStep, fallbackPhoto:rawStepPhotos[idx]}));
+  return [...ingredientEntries, ...topLevelEntries];
+}
+
 function normalizeRecipe(r){
+  const rawIngredients = Array.isArray(r.ingredients) ? r.ingredients : [];
+  const rawSteps = Array.isArray(r.steps) ? r.steps : [];
+  const rawStepPhotos = Array.isArray(r.stepPhotos) ? r.stepPhotos : [];
+  const rawStepTitles = Array.isArray(r.stepTitles) ? r.stepTitles : [];
+  const entries = recipeStepEntries(rawIngredients, rawSteps, rawStepPhotos)
+    .map(entry => ({...entry, text:stepText(entry.rawStep)}))
+    .filter(entry => entry.text);
+  const stepTitles = entries.map((entry, idx) => String(rawStepTitles[idx] || stepTitle(entry.rawStep) || stepText(entry.rawStep)).trim());
+  const stepPhotos = entries.map(entry => stepPhoto(entry.rawStep, entry.fallbackPhoto));
   return {
     id:r.id || uid(),
     title:String(r.title || "Untitled Recipe").trim() || "Untitled Recipe",
     category:CATEGORIES.includes(r.category) ? r.category : "Other",
     servings:String(r.servings || "").trim(),
     contributor:String(r.contributor || r.author || "").trim(),
-    ingredients:Array.isArray(r.ingredients) ? r.ingredients.map(String).filter(Boolean) : [],
-    steps:Array.isArray(r.steps) ? r.steps.map(String).filter(Boolean) : [],
+    ingredients:rawIngredients.map(ingredientText).filter(Boolean),
+    steps:entries.map(entry => entry.text),
+    stepTitles,
     notes:String(r.notes || "").trim(),
     slug:slugify(r.slug || r.title || "recipe"),
     author:String(r.author || r.contributor || "").trim(),
     updatedAt:r.updatedAt || "",
-    stepPhotos:Array.isArray(r.stepPhotos) ? r.stepPhotos : []
+    stepPhotos
   };
 }
 
@@ -210,6 +284,7 @@ function withMeta(recipe, meta){
 function recipeForStorage(recipe){
   const r = normalizeRecipe(recipe);
   return {
+    format:"family-recipe-box.recipe.v1",
     id:r.id,
     slug:r.slug,
     title:r.title,
@@ -217,9 +292,29 @@ function recipeForStorage(recipe){
     servings:r.servings,
     contributor:r.contributor,
     author:r.author || githubUser || r.contributor,
-    ingredients:r.ingredients,
-    steps:r.steps,
-    stepPhotos:Array.isArray(r.stepPhotos) ? r.stepPhotos : [],
+    ingredients:r.ingredients.map((text, idx) => {
+      const image = normalizePhotoRef(r.stepPhotos[idx]);
+      const ingredient = {text};
+      const stepTextValue = r.steps[idx];
+      if(stepTextValue){
+        ingredient.step = {
+          title:r.stepTitles[idx] || stepTextValue,
+          text:stepTextValue
+        };
+        if(image) ingredient.step.image = image;
+      }
+      return ingredient;
+    }),
+    steps:r.steps.slice(r.ingredients.length).map((text, offset) => {
+      const idx = r.ingredients.length + offset;
+      const image = normalizePhotoRef(r.stepPhotos[idx]);
+      const step = {
+        title:r.stepTitles[idx] || text,
+        text
+      };
+      if(image) step.image = image;
+      return step;
+    }),
     notes:r.notes,
     updatedAt:new Date().toISOString()
   };
@@ -420,6 +515,7 @@ async function testGithubWriteAccess(){
   const body = {
     message:"Test RecipeBook write access",
     content:encodeJson({
+      format:"family-recipe-box.recipe.v1",
       id:slug,
       slug,
       title:"RecipeBook Access Test",
@@ -730,10 +826,79 @@ function showToast(msg){
 }
 
 function makeRecipeShareUrl(recipe){
-  const payload = btoa(unescape(encodeURIComponent(JSON.stringify(normalizeRecipe(recipe)))));
+  const payload = btoa(unescape(encodeURIComponent(JSON.stringify(recipeForStorage(recipe)))));
   const url = new URL(location.href);
   url.hash = "recipe=" + payload;
   return url.toString();
+}
+
+function recipeFormatExample(){
+  return {
+    format:"family-recipe-box.recipe.v1",
+    title:"Mujadara",
+    category:"Mains",
+    servings:"4",
+    contributor:"Aunt Rosa",
+    ingredients:[
+      {
+        text:"1 cup brown or green lentils",
+        step:{
+          title:"Rinse lentils",
+          text:"Rinse lentils, then boil for 15 minutes until just tender.",
+          image:{path:"photos/rinse lentiles.png", name:"rinse lentiles"}
+        }
+      },
+      {
+        text:"1 cup basmati rice",
+        step:{
+          title:"Wash rice",
+          text:"Rinse rice until the water runs clear.",
+          image:{path:"photos/wash rice.png", name:"wash rice"}
+        }
+      },
+      {
+        text:"3 large onions, thinly sliced",
+        step:{
+          title:"Saute onions",
+          text:"Cook onions in olive oil until deep golden brown.",
+          image:{path:"photos/saute onions.png", name:"saute onions"}
+        }
+      }
+    ],
+    steps:[
+      {title:"Serve", text:"Fluff everything together and serve warm."}
+    ],
+    notes:"Ingredient steps display in ingredient order. Use existing photo paths from the Photos tab, or omit image to let the app match one."
+  };
+}
+
+function openRecipeJsonFormat(){
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  const example = JSON.stringify(recipeFormatExample(), null, 2);
+  overlay.innerHTML = `
+    <div class="modal wide">
+      <button class="modal-close">&times;</button>
+      <h2>Recipe JSON Format</h2>
+      <div class="rule"></div>
+      <textarea id="json-format-output" rows="18" readonly>${escapeHtml(example)}</textarea>
+      <div class="modal-actions">
+        <button class="btn-primary" id="copyJsonFormat">Copy Format</button>
+        <button class="btn-ghost" id="addJsonFromFormat">Add JSON</button>
+      </div>
+      <div id="json-format-status"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
+  overlay.querySelector("#copyJsonFormat").onclick = async () => {
+    await navigator.clipboard.writeText(example);
+    overlay.querySelector("#json-format-status").innerHTML = `<div class="status-line">Copied.</div>`;
+  };
+  overlay.querySelector("#addJsonFromFormat").onclick = () => {
+    overlay.remove();
+    openImport(example);
+  };
 }
 
 function importSharedRecipeFromHash(){
@@ -768,13 +933,15 @@ async function shareRecipe(recipe){
 function renderStepDisplay(recipe){
   return recipe.steps.map((step, idx) => {
     const photo = recipe.stepPhotos && recipe.stepPhotos[idx];
+    const title = (recipe.stepTitles && recipe.stepTitles[idx]) || step;
     if(photo && photo.path){
       return `
         <div class="step-card">
           <div class="step-header">
             <div class="step-number-big">${idx + 1}</div>
-            <div class="step-title">${escapeHtml(step)}</div>
+            <div class="step-title">${escapeHtml(title)}</div>
           </div>
+          ${title !== step ? `<div class="step-caption">${escapeHtml(step)}</div>` : ""}
           <img src="${escapeHtml(rawUrl(photo.path))}" alt="${escapeHtml(photo.name || "Step " + (idx + 1))}">
         </div>
       `;
@@ -979,17 +1146,24 @@ function openFormatPaste(){
   };
 }
 
-function openImport(){
+function recipesFromJson(parsed){
+  if(Array.isArray(parsed)) return parsed;
+  if(parsed && Array.isArray(parsed.recipes)) return parsed.recipes;
+  if(parsed && parsed.recipe) return [parsed.recipe];
+  return [parsed];
+}
+
+function openImport(prefill = ""){
   const overlay = document.createElement("div");
   overlay.className = "overlay";
   overlay.innerHTML = `
     <div class="modal wide">
       <button class="modal-close">&times;</button>
-      <h2>Import Recipes</h2>
+      <h2>Add Recipe JSON</h2>
       <div class="rule"></div>
       <div class="tool-box">
-        <label style="margin-top:0">Paste exported JSON</label>
-        <textarea id="import-input" rows="8" placeholder='Paste a recipe or recipe box JSON export here. Imported recipes are committed to GitHub.'></textarea>
+        <label style="margin-top:0">Paste recipe JSON</label>
+        <textarea id="import-input" rows="12" placeholder='Paste one recipe, {"recipe": ...}, or {"recipes": [...]} here. Imported recipes are committed to GitHub.'>${escapeHtml(prefill)}</textarea>
         <div class="modal-actions">
           <button class="btn-primary" id="import-run">Import to GitHub</button>
           <button class="btn-ghost" id="import-file">Choose File</button>
@@ -1016,7 +1190,7 @@ function openImport(){
     try{
       overlay.querySelector("#import-run").disabled = true;
       const parsed = JSON.parse(input.value);
-      const incoming = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.recipes) ? parsed.recipes : [parsed]);
+      const incoming = recipesFromJson(parsed);
       const normalized = incoming.map(normalizeRecipe);
       for(const rec of normalized){
         await saveRecipeToGithub({...rec, id:uid()}, null);
@@ -1099,7 +1273,10 @@ function openGithubSettings(){
 }
 
 function exportBox(){
-  const blob = new Blob([JSON.stringify({recipes}, null, 2)], {type:"application/json"});
+  const blob = new Blob([JSON.stringify({
+    format:"family-recipe-box.export.v1",
+    recipes:recipes.map(recipeForStorage)
+  }, null, 2)], {type:"application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "family-recipe-box.json";
@@ -1112,7 +1289,9 @@ function exportBox(){
 document.getElementById("search").addEventListener("input", e => { searchTerm = e.target.value; render(); });
 document.getElementById("btnAdd").onclick = () => openForm(null);
 document.getElementById("btnFormat").onclick = openFormatPaste;
-document.getElementById("btnImport").onclick = openImport;
+document.getElementById("btnJsonFormat").onclick = openRecipeJsonFormat;
+document.getElementById("btnAddJson").onclick = () => openImport();
+document.getElementById("btnImport").onclick = () => openImport();
 document.getElementById("btnSync").onclick = () => loadRecipes(false);
 document.getElementById("btnSettings").onclick = openGithubSettings;
 document.getElementById("btnExport").onclick = exportBox;
