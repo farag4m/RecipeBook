@@ -611,9 +611,10 @@ function rankedPhotoMatches(step, recipe){
 }
 
 function autoAssignStepPhotos(recipe){
-  const stepPhotos = [];
+  const stepPhotos = (recipe.stepPhotos || []).map(normalizePhotoRef);
   const ambiguous = [];
   recipe.steps.forEach((step, idx) => {
+    if(stepPhotos[idx]) return;
     const matches = rankedPhotoMatches(step, recipe);
     if(matches.length === 0){
       stepPhotos[idx] = null;
@@ -1153,6 +1154,23 @@ function recipesFromJson(parsed){
   return [parsed];
 }
 
+function cleanJsonInput(raw){
+  let text = String(raw || "").trim();
+  if(text.startsWith("```")){
+    text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  }
+  return text;
+}
+
+function parseRecipeJson(raw){
+  const text = cleanJsonInput(raw);
+  if(!text) throw new Error("Paste recipe JSON first.");
+  const parsed = JSON.parse(text);
+  const incoming = recipesFromJson(parsed).filter(Boolean);
+  if(incoming.length === 0) throw new Error("No recipes were found in that JSON.");
+  return incoming;
+}
+
 function openImport(prefill = ""){
   const overlay = document.createElement("div");
   overlay.className = "overlay";
@@ -1187,19 +1205,29 @@ function openImport(prefill = ""){
   };
   overlay.querySelector("#import-run").onclick = async () => {
     if(!requireGithubWrite()) return;
+    const importBtn = overlay.querySelector("#import-run");
+    const status = overlay.querySelector("#import-status");
     try{
-      overlay.querySelector("#import-run").disabled = true;
-      const parsed = JSON.parse(input.value);
-      const incoming = recipesFromJson(parsed);
+      importBtn.disabled = true;
+      status.innerHTML = `<div class="status-line">Reading JSON...</div>`;
+      const incoming = parseRecipeJson(input.value);
       const normalized = incoming.map(normalizeRecipe);
       for(const rec of normalized){
-        await saveRecipeToGithub({...rec, id:uid()}, null);
+        status.innerHTML = `<div class="status-line">Matching photos for ${escapeHtml(rec.title)}...</div>`;
+        const resolved = await resolveRecipeStepPhotos({...rec, id:uid()});
+        if(!resolved){
+          importBtn.disabled = false;
+          status.innerHTML = `<div class="status-line">Import cancelled.</div>`;
+          return;
+        }
+        status.innerHTML = `<div class="status-line">Saving ${escapeHtml(rec.title)}...</div>`;
+        await saveRecipeToGithub(resolved, null);
       }
       overlay.remove();
       showToast(`Imported ${normalized.length} recipe${normalized.length === 1 ? "" : "s"}`);
     }catch(e){
-      overlay.querySelector("#import-run").disabled = false;
-      overlay.querySelector("#import-status").innerHTML = `<div class="error-msg">Could not read that JSON export.</div>`;
+      importBtn.disabled = false;
+      status.innerHTML = `<div class="error-msg">Could not import JSON: ${escapeHtml(githubPermissionHint(e.message))}</div>`;
     }
   };
 }
