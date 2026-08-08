@@ -325,6 +325,7 @@ async function saveRecipeToGithub(recipe, existing){
   if(sha) body.sha = sha;
   await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
     method:"PUT",
+    headers:{"Content-Type":"application/json"},
     body:JSON.stringify(body)
   }, true);
   await loadRecipes(true);
@@ -338,6 +339,7 @@ async function deleteRecipeFromGithub(recipe){
   if(!sha) return false;
   await githubApi(`contents/${encodeURIComponent(recipe._path).replace(/%2F/g, "/")}`, {
     method:"DELETE",
+    headers:{"Content-Type":"application/json"},
     body:JSON.stringify({
       message:`Delete recipe: ${recipe.title}`,
       sha,
@@ -535,6 +537,7 @@ function openForm(existing, prefill){
         <button class="btn-primary" id="saveBtn">Save Recipe</button>
         <button class="btn-ghost" id="cancelBtn">Cancel</button>
       </div>
+      <div id="form-status"></div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -542,6 +545,8 @@ function openForm(existing, prefill){
   overlay.querySelector("#cancelBtn").onclick = () => overlay.remove();
   overlay.querySelector("#saveBtn").onclick = async () => {
     const titleField = overlay.querySelector("#f-title");
+    const saveBtn = overlay.querySelector("#saveBtn");
+    const statusEl = overlay.querySelector("#form-status");
     const title = titleField.value.trim();
     let titleErr = overlay.querySelector("#title-err");
     if(!title){
@@ -567,16 +572,22 @@ function openForm(existing, prefill){
       notes:overlay.querySelector("#f-notes").value.trim()
     });
     try{
-      overlay.querySelector("#saveBtn").disabled = true;
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving...";
+      statusEl.innerHTML = `<div class="status-line">Saving to GitHub...</div>`;
       const saved = await saveRecipeToGithub(rec, existing);
       if(saved){
         overlay.remove();
         showToast(`Saved "${rec.title}"`);
       }else{
-        overlay.querySelector("#saveBtn").disabled = false;
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Recipe";
+        statusEl.innerHTML = `<div class="error-msg">GitHub access is required before saving.</div>`;
       }
     }catch(e){
-      overlay.querySelector("#saveBtn").disabled = false;
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save Recipe";
+      statusEl.innerHTML = `<div class="error-msg">Could not save to GitHub: ${escapeHtml(e.message || "GitHub error")}</div>`;
       lastError = "Could not save recipe (" + (e.message || "GitHub error") + ").";
       render();
     }
