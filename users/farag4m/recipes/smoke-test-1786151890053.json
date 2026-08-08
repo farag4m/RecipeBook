@@ -1,0 +1,17 @@
+{
+  "id": "smoke",
+  "slug": "smoke-test-1786151890053",
+  "title": "Smoke Test Recipe",
+  "category": "Other",
+  "servings": "1",
+  "contributor": "Smoke Test",
+  "author": "farag4m",
+  "ingredients": [
+    "1 test"
+  ],
+  "steps": [
+    "Save through GitHub Contents API"
+  ],
+  "notes": "temporary",
+  "updatedAt": "2026-08-08T01:18:10.053Z"
+}
