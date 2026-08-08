@@ -94,6 +94,8 @@
   .hint{font-size:11.5px;color:var(--ink-soft);margin-top:4px;text-transform:none;font-family:'Comic Neue';letter-spacing:0;}
   .tool-box{background:#FFF0B8;border:3px dashed var(--ink);border-radius:10px;padding:16px;margin-bottom:6px;}
   .share-link{word-break:break-all;background:#fff;border:2px solid var(--ink);border-radius:8px;padding:10px;font-size:12px;margin-top:10px;}
+  .status-line{font-size:12px;color:var(--ink-soft);margin-top:10px;line-height:1.45;}
+  .sync-pill{display:inline-block;background:var(--paper-raised);border:2px solid var(--ink);border-radius:20px;padding:3px 9px;margin-left:6px;color:var(--ink);}
   .error-msg{color:var(--rule-red);font-size:13px;font-weight:700;margin-top:8px;}
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--pop);color:#fff;border:3px solid var(--ink);border-radius:10px;padding:12px 20px;font-family:'Bangers';font-size:16px;letter-spacing:.02em;box-shadow:4px 4px 0 var(--ink);opacity:0;transition:opacity .25s ease, transform .25s ease;z-index:100;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -117,6 +119,8 @@
     <div class="header-actions">
       <button class="btn-ai" id="btnFormat">Format Paste</button>
       <button class="btn-ghost" id="btnImport">Import</button>
+      <button class="btn-ghost" id="btnSync">Sync</button>
+      <button class="btn-ghost" id="btnSettings">GitHub</button>
       <button class="btn-primary" id="btnAdd">+ Add Recipe</button>
     </div>
   </div>
@@ -126,7 +130,7 @@
     <main class="main">
       <div class="search-row">
         <input class="search" id="search" type="text" placeholder="Search recipes by name...">
-        <button class="btn-ghost" id="btnExport">Export Box</button>
+        <button class="btn-ghost" id="btnExport">Export View</button>
       </div>
       <div class="grid" id="grid"></div>
     </main>
@@ -136,42 +140,35 @@
 <script>
 const CATEGORIES = ["Breakfast","Mains","Sides","Desserts","Drinks","Snacks","Other"];
 const CAT_ICON = {Breakfast:"🍳",Mains:"🍝",Sides:"🥗",Desserts:"🍰",Drinks:"🥤",Snacks:"🍿",Other:"⭐"};
-const STORAGE_KEY = "family-recipe-box:v1";
+const GITHUB_OWNER = "farag4m";
+const GITHUB_REPO = "RecipeBook";
+const DATA_BRANCH = "data";
+const POLL_MS = 15000;
+const TOKEN_KEY = "family-recipe-box:github-token";
+const USER_KEY = "family-recipe-box:github-user";
 let recipes = [];
 let activeCat = "All";
 let searchTerm = "";
 let lastError = "";
+let syncTimer = null;
+let syncInFlight = false;
+let lastSyncAt = null;
+let githubToken = sessionStorage.getItem(TOKEN_KEY) || "";
+let githubUser = sessionStorage.getItem(USER_KEY) || "";
 
 const grid = document.getElementById("grid");
 const tabsEl = document.getElementById("tabs");
 const subcount = document.getElementById("subcount");
 
-function loadRecipes(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    recipes = raw ? JSON.parse(raw) : [];
-    if(!Array.isArray(recipes)) recipes = [];
-    lastError = "";
-  }catch(e){
-    recipes = [];
-    lastError = "Could not load saved recipes. Browser storage may be unavailable.";
-  }
-  render();
-}
-
-function saveRecipes(shouldRender = true){
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(recipes));
-    lastError = "";
-  }catch(e){
-    lastError = "Could not save recipes. Browser storage may be full or disabled.";
-  }
-  if(shouldRender) render();
-  return !lastError;
-}
-
 function uid(){ return "r" + Date.now() + Math.random().toString(36).slice(2,7); }
 function escapeHtml(s){ return String(s || "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+function slugify(s){
+  return String(s || "recipe").toLowerCase().trim()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 70) || "recipe";
+}
 function normalizeRecipe(r){
   return {
     id:r.id || uid(),
@@ -179,10 +176,176 @@ function normalizeRecipe(r){
     category:CATEGORIES.includes(r.category) ? r.category : "Other",
     servings:String(r.servings || "").trim(),
     contributor:String(r.contributor || "").trim(),
+    contributor:String(r.contributor || r.author || "").trim(),
     ingredients:Array.isArray(r.ingredients) ? r.ingredients.map(String).filter(Boolean) : [],
     steps:Array.isArray(r.steps) ? r.steps.map(String).filter(Boolean) : [],
-    notes:String(r.notes || "").trim()
+    notes:String(r.notes || "").trim(),
+    slug:slugify(r.slug || r.title || "recipe"),
+    author:String(r.author || r.contributor || "").trim(),
+    updatedAt:r.updatedAt || ""
   };
+}
+
+function withMeta(recipe, meta){
+  return Object.assign(normalizeRecipe(recipe), meta);
+}
+
+function recipeForStorage(recipe){
+  const r = normalizeRecipe(recipe);
+  return {
+    id:r.id,
+    slug:r.slug,
+    title:r.title,
+    category:r.category,
+    servings:r.servings,
+    contributor:r.contributor,
+    author:r.author || githubUser || r.contributor,
+    ingredients:r.ingredients,
+    steps:r.steps,
+    notes:r.notes,
+    updatedAt:new Date().toISOString()
+  };
+}
+
+function githubHeaders(auth){
+  const headers = {
+    "Accept":"application/vnd.github+json",
+    "X-GitHub-Api-Version":"2022-11-28"
+  };
+  if(auth && githubToken) headers.Authorization = `Bearer ${githubToken}`;
+  return headers;
+}
+
+async function githubApi(path, options = {}, auth = false){
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/${path}`, {
+    cache:"no-store",
+    ...options,
+    headers:{...githubHeaders(auth), ...(options.headers || {})}
+  });
+  if(!res.ok){
+    const text = await res.text();
+    let message = `GitHub API ${res.status}`;
+    try{ message = JSON.parse(text).message || message; }catch(e){}
+    const err = new Error(message);
+    err.status = res.status;
+    throw err;
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+function rawUrl(path){
+  return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${DATA_BRANCH}/${path}?v=${Date.now()}`;
+}
+
+async function loadRecipes(silent = false){
+  if(syncInFlight) return;
+  syncInFlight = true;
+  if(!silent) subcount.textContent = "syncing recipes...";
+  try{
+    const tree = await githubApi(`git/trees/${encodeURIComponent(DATA_BRANCH)}?recursive=1`, {}, Boolean(githubToken));
+    const files = (tree.tree || []).filter(item =>
+      item.type === "blob" &&
+      /^users\/[^/]+\/recipes\/[^/]+\.json$/.test(item.path)
+    );
+    const loaded = await Promise.all(files.map(async item => {
+      const res = await fetch(rawUrl(item.path), {cache:"no-store"});
+      if(!res.ok) throw new Error(`Could not read ${item.path}`);
+      const parsed = await res.json();
+      const owner = item.path.split("/")[1];
+      const slug = item.path.split("/").pop().replace(/\.json$/, "");
+      return withMeta(parsed, {_path:item.path, _sha:item.sha, _owner:owner, _slug:slug});
+    }));
+    recipes = loaded.sort((a,b) => a.title.localeCompare(b.title));
+    lastError = "";
+    lastSyncAt = new Date();
+  }catch(e){
+    if(e.status === 404){
+      recipes = [];
+      lastError = "";
+      lastSyncAt = new Date();
+    }else{
+      lastError = "Could not sync GitHub recipes (" + (e.message || "network error") + ").";
+    }
+  }finally{
+    syncInFlight = false;
+    render();
+  }
+}
+
+function startSyncTimer(){
+  if(syncTimer) clearInterval(syncTimer);
+  syncTimer = setInterval(() => loadRecipes(true), POLL_MS);
+}
+
+function requireGithubWrite(){
+  if(githubToken && githubUser) return true;
+  openGithubSettings();
+  showToast("Add GitHub access first");
+  return false;
+}
+
+function bytesToBase64(bytes){
+  let binary = "";
+  const chunk = 0x8000;
+  for(let i = 0; i < bytes.length; i += chunk){
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function encodeJson(obj){
+  return bytesToBase64(new TextEncoder().encode(JSON.stringify(obj, null, 2)));
+}
+
+function recipePathFor(recipe, existing){
+  if(existing && existing._path) return existing._path;
+  return `users/${githubUser}/recipes/${slugify(recipe.slug || recipe.title)}.json`;
+}
+
+async function getFileSha(path){
+  try{
+    const data = await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}?ref=${encodeURIComponent(DATA_BRANCH)}`, {}, true);
+    return data.sha || null;
+  }catch(e){
+    if(e.status === 404) return null;
+    throw e;
+  }
+}
+
+async function saveRecipeToGithub(recipe, existing){
+  if(!requireGithubWrite()) return false;
+  const stored = recipeForStorage({...recipe, author:recipe.author || githubUser});
+  const path = recipePathFor(stored, existing);
+  const sha = await getFileSha(path);
+  const body = {
+    message:`Save recipe: ${stored.title}`,
+    content:encodeJson(stored),
+    branch:DATA_BRANCH
+  };
+  if(sha) body.sha = sha;
+  await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
+    method:"PUT",
+    body:JSON.stringify(body)
+  }, true);
+  await loadRecipes(true);
+  return true;
+}
+
+async function deleteRecipeFromGithub(recipe){
+  if(!requireGithubWrite()) return false;
+  if(!recipe._path) return false;
+  const sha = await getFileSha(recipe._path);
+  if(!sha) return false;
+  await githubApi(`contents/${encodeURIComponent(recipe._path).replace(/%2F/g, "/")}`, {
+    method:"DELETE",
+    body:JSON.stringify({
+      message:`Delete recipe: ${recipe.title}`,
+      sha,
+      branch:DATA_BRANCH
+    })
+  }, true);
+  await loadRecipes(true);
+  return true;
 }
 
 const ING_ICONS = [
@@ -226,10 +389,10 @@ function render(){
 
   subcount.innerHTML = lastError
     ? `<span class="err-banner">⚠️ ${escapeHtml(lastError)}</span>`
-    : `${recipes.length} recipe${recipes.length === 1 ? "" : "s"} saved in this browser`;
+    : `${recipes.length} recipe${recipes.length === 1 ? "" : "s"} in GitHub <span class="sync-pill">${lastSyncAt ? "synced " + lastSyncAt.toLocaleTimeString() : "syncing"}</span>`;
 
   if(filtered.length === 0){
-    grid.innerHTML = `<div class="empty"><b>Nothing here yet</b>${recipes.length === 0 ? "Add your first family recipe to start the box." : "No recipes match this view."}</div>`;
+    grid.innerHTML = `<div class="empty"><b>Nothing here yet</b>${recipes.length === 0 ? "Add your first family recipe to GitHub." : "No recipes match this view."}</div>`;
     return;
   }
 
@@ -237,7 +400,7 @@ function render(){
     <div class="card" data-id="${escapeHtml(r.id)}">
       <div class="card-icon">${CAT_ICON[r.category] || "⭐"}</div>
       <h3>${escapeHtml(r.title)}</h3>
-      <div class="meta"><span>${r.servings ? "🍽️ " + escapeHtml(r.servings) : ""}</span><span>${r.contributor ? "👤 " + escapeHtml(r.contributor) : ""}</span></div>
+      <div class="meta"><span>${r.servings ? "🍽️ " + escapeHtml(r.servings) : ""}</span><span>${r.author || r.contributor ? "👤 " + escapeHtml(r.author || r.contributor) : ""}</span></div>
     </div>
   `).join("");
   grid.querySelectorAll(".card").forEach(c => c.onclick = () => openView(c.dataset.id));
@@ -264,15 +427,9 @@ function importSharedRecipeFromHash(){
   try{
     const json = decodeURIComponent(escape(atob(location.hash.slice(8))));
     const incoming = normalizeRecipe(JSON.parse(json));
-    const exists = recipes.some(r => r.title === incoming.title && JSON.stringify(r.ingredients) === JSON.stringify(incoming.ingredients));
-    if(!exists){
-      incoming.id = uid();
-      recipes.push(incoming);
-      saveRecipes(false);
-      showToast(`Imported "${incoming.title}"`);
-    }
     history.replaceState(null, "", location.pathname + location.search);
-    render();
+    openForm(null, incoming);
+    showToast(`Review and save "${incoming.title}"`);
   }catch(e){
     lastError = "That shared recipe link could not be read.";
     render();
@@ -330,11 +487,17 @@ function openView(id){
   delBtn.onclick = () => {
     delBtn.outerHTML = `<span class="confirm-row">Delete for good? <button class="btn-danger btn-small" id="delYes">Yes, delete</button> <button class="btn-ghost btn-small" id="delNo">Cancel</button></span>`;
     overlay.querySelector("#delNo").onclick = () => { overlay.remove(); openView(r.id); };
-    overlay.querySelector("#delYes").onclick = () => {
-      recipes = recipes.filter(x => x.id !== r.id);
-      saveRecipes();
-      overlay.remove();
-      if(!lastError) showToast(`Deleted "${r.title}"`);
+    overlay.querySelector("#delYes").onclick = async () => {
+      try{
+        const deleted = await deleteRecipeFromGithub(r);
+        if(deleted){
+          overlay.remove();
+          showToast(`Deleted "${r.title}"`);
+        }
+      }catch(e){
+        lastError = "Could not delete recipe (" + (e.message || "GitHub error") + ").";
+        render();
+      }
     };
   };
 }
@@ -377,7 +540,7 @@ function openForm(existing, prefill){
   document.body.appendChild(overlay);
   overlay.querySelector(".modal-close").onclick = () => overlay.remove();
   overlay.querySelector("#cancelBtn").onclick = () => overlay.remove();
-  overlay.querySelector("#saveBtn").onclick = () => {
+  overlay.querySelector("#saveBtn").onclick = async () => {
     const titleField = overlay.querySelector("#f-title");
     const title = titleField.value.trim();
     let titleErr = overlay.querySelector("#title-err");
@@ -403,10 +566,20 @@ function openForm(existing, prefill){
       steps:overlay.querySelector("#f-steps").value.split("\n").map(s => s.trim()).filter(Boolean),
       notes:overlay.querySelector("#f-notes").value.trim()
     });
-    recipes = existing ? recipes.map(r => r.id === existing.id ? rec : r) : [...recipes, rec];
-    saveRecipes();
-    overlay.remove();
-    if(!lastError) showToast(`Saved "${rec.title}"`);
+    try{
+      overlay.querySelector("#saveBtn").disabled = true;
+      const saved = await saveRecipeToGithub(rec, existing);
+      if(saved){
+        overlay.remove();
+        showToast(`Saved "${rec.title}"`);
+      }else{
+        overlay.querySelector("#saveBtn").disabled = false;
+      }
+    }catch(e){
+      overlay.querySelector("#saveBtn").disabled = false;
+      lastError = "Could not save recipe (" + (e.message || "GitHub error") + ").";
+      render();
+    }
   };
 }
 
@@ -467,9 +640,9 @@ function openImport(){
       <div class="rule"></div>
       <div class="tool-box">
         <label style="margin-top:0">Paste exported JSON</label>
-        <textarea id="import-input" rows="8" placeholder='Paste a recipe or recipe box JSON export here.'></textarea>
+        <textarea id="import-input" rows="8" placeholder='Paste a recipe or recipe box JSON export here. Imported recipes are committed to GitHub.'></textarea>
         <div class="modal-actions">
-          <button class="btn-primary" id="import-run">Import</button>
+          <button class="btn-primary" id="import-run">Import to GitHub</button>
           <button class="btn-ghost" id="import-file">Choose File</button>
           <input type="file" id="file-input" accept="application/json,.json" hidden>
         </div>
@@ -489,17 +662,93 @@ function openImport(){
     reader.onload = () => { input.value = reader.result; };
     reader.readAsText(file);
   };
-  overlay.querySelector("#import-run").onclick = () => {
+  overlay.querySelector("#import-run").onclick = async () => {
+    if(!requireGithubWrite()) return;
     try{
+      overlay.querySelector("#import-run").disabled = true;
       const parsed = JSON.parse(input.value);
       const incoming = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.recipes) ? parsed.recipes : [parsed]);
       const normalized = incoming.map(normalizeRecipe);
-      recipes = [...recipes, ...normalized.map(r => ({...r, id:uid()}))];
-      saveRecipes();
+      for(const rec of normalized){
+        await saveRecipeToGithub({...rec, id:uid()}, null);
+      }
       overlay.remove();
       showToast(`Imported ${normalized.length} recipe${normalized.length === 1 ? "" : "s"}`);
     }catch(e){
+      overlay.querySelector("#import-run").disabled = false;
       overlay.querySelector("#import-status").innerHTML = `<div class="error-msg">Could not read that JSON export.</div>`;
+    }
+  };
+}
+
+function openGithubSettings(){
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="modal wide">
+      <button class="modal-close">&times;</button>
+      <h2>GitHub Access</h2>
+      <div class="rule"></div>
+      <div class="tool-box">
+        <div class="status-line">
+          Repo: ${GITHUB_OWNER}/${GITHUB_REPO}<br>
+          Data branch: ${DATA_BRANCH}<br>
+          Public reads refresh every ${Math.round(POLL_MS / 1000)} seconds.
+        </div>
+        <label>GitHub Username</label>
+        <input type="text" id="gh-user" value="${escapeHtml(githubUser)}" placeholder="your-github-username">
+        <label>Fine-grained token</label>
+        <input type="text" id="gh-token" value="${escapeHtml(githubToken)}" placeholder="Contents: Read and write for this repo">
+        <div class="hint">The token is kept in this browser tab session only. It is needed only for adding, editing, deleting, or importing recipes.</div>
+        <div class="modal-actions">
+          <button class="btn-primary" id="gh-save">Save Access</button>
+          <button class="btn-ai" id="gh-test">Test</button>
+          <button class="btn-danger" id="gh-clear">Clear</button>
+        </div>
+        <div id="gh-status"></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const userInput = overlay.querySelector("#gh-user");
+  const tokenInput = overlay.querySelector("#gh-token");
+  const status = overlay.querySelector("#gh-status");
+  function storeAccess(){
+    githubUser = userInput.value.trim();
+    githubToken = tokenInput.value.trim();
+    if(githubUser) sessionStorage.setItem(USER_KEY, githubUser); else sessionStorage.removeItem(USER_KEY);
+    if(githubToken) sessionStorage.setItem(TOKEN_KEY, githubToken); else sessionStorage.removeItem(TOKEN_KEY);
+  }
+  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
+  overlay.querySelector("#gh-save").onclick = () => {
+    storeAccess();
+    showToast("GitHub access saved");
+    overlay.remove();
+  };
+  overlay.querySelector("#gh-clear").onclick = () => {
+    githubUser = "";
+    githubToken = "";
+    sessionStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    showToast("GitHub access cleared");
+    overlay.remove();
+  };
+  overlay.querySelector("#gh-test").onclick = async () => {
+    storeAccess();
+    if(!githubUser || !githubToken){
+      status.innerHTML = `<div class="error-msg">Enter both username and token.</div>`;
+      return;
+    }
+    status.innerHTML = `<div class="status-line">Testing GitHub token...</div>`;
+    try{
+      await githubApi(`contents/users/${encodeURIComponent(githubUser)}/recipes?ref=${encodeURIComponent(DATA_BRANCH)}`, {}, true);
+      status.innerHTML = `<div class="status-line">Token can read this repo. If your folder is empty, saving a recipe will create files.</div>`;
+    }catch(e){
+      if(e.status === 404){
+        status.innerHTML = `<div class="status-line">Token works, and your recipe folder will be created on first save.</div>`;
+      }else{
+        status.innerHTML = `<div class="error-msg">GitHub test failed: ${escapeHtml(e.message || "token error")}</div>`;
+      }
     }
   };
 }
@@ -519,10 +768,13 @@ document.getElementById("search").addEventListener("input", e => { searchTerm = 
 document.getElementById("btnAdd").onclick = () => openForm(null);
 document.getElementById("btnFormat").onclick = openFormatPaste;
 document.getElementById("btnImport").onclick = openImport;
+document.getElementById("btnSync").onclick = () => loadRecipes(false);
+document.getElementById("btnSettings").onclick = openGithubSettings;
 document.getElementById("btnExport").onclick = exportBox;
 
 loadRecipes();
 importSharedRecipeFromHash();
+startSyncTimer();
 </script>
 </body>
 </html>
