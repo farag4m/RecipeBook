@@ -350,6 +350,54 @@ async function deleteRecipeFromGithub(recipe){
   return true;
 }
 
+async function testGithubWriteAccess(){
+  const slug = "access-test-" + Date.now();
+  const path = `users/${githubUser}/recipes/${slug}.json`;
+  const body = {
+    message:"Test RecipeBook write access",
+    content:encodeJson({
+      id:slug,
+      slug,
+      title:"RecipeBook Access Test",
+      category:"Other",
+      servings:"",
+      contributor:githubUser,
+      author:githubUser,
+      ingredients:[],
+      steps:[],
+      notes:"Temporary permission test",
+      updatedAt:new Date().toISOString()
+    }),
+    branch:DATA_BRANCH
+  };
+  const created = await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)
+  }, true);
+  if(created.content && created.content.sha){
+    await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
+      method:"DELETE",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        message:"Remove RecipeBook write access test",
+        sha:created.content.sha,
+        branch:DATA_BRANCH
+      })
+    }, true);
+  }
+}
+
+function githubPermissionHint(message){
+  if(/resource not accessible by personal access token/i.test(message || "")){
+    return "Token cannot write this repo. Recreate it as a fine-grained token for farag4m/RecipeBook with Contents: Read and write.";
+  }
+  if(/bad credentials/i.test(message || "")){
+    return "Token is invalid or revoked. Create a new fine-grained token.";
+  }
+  return message || "GitHub error";
+}
+
 const ING_ICONS = [
   [/egg/i,"🥚"],[/flour/i,"🌾"],[/sugar/i,"🍬"],[/butter/i,"🧈"],[/milk|cream/i,"🥛"],
   [/cheese/i,"🧀"],[/chicken/i,"🍗"],[/beef|steak/i,"🥩"],[/pork|bacon/i,"🥓"],[/fish|salmon|shrimp/i,"🐟"],
@@ -587,7 +635,7 @@ function openForm(existing, prefill){
     }catch(e){
       saveBtn.disabled = false;
       saveBtn.textContent = "Save Recipe";
-      statusEl.innerHTML = `<div class="error-msg">Could not save to GitHub: ${escapeHtml(e.message || "GitHub error")}</div>`;
+      statusEl.innerHTML = `<div class="error-msg">Could not save to GitHub: ${escapeHtml(githubPermissionHint(e.message))}</div>`;
       lastError = "Could not save recipe (" + (e.message || "GitHub error") + ").";
       render();
     }
@@ -750,16 +798,12 @@ function openGithubSettings(){
       status.innerHTML = `<div class="error-msg">Enter both username and token.</div>`;
       return;
     }
-    status.innerHTML = `<div class="status-line">Testing GitHub token...</div>`;
+      status.innerHTML = `<div class="status-line">Testing GitHub read/write access...</div>`;
     try{
-      await githubApi(`contents/users/${encodeURIComponent(githubUser)}/recipes?ref=${encodeURIComponent(DATA_BRANCH)}`, {}, true);
-      status.innerHTML = `<div class="status-line">Token can read this repo. If your folder is empty, saving a recipe will create files.</div>`;
+      await testGithubWriteAccess();
+      status.innerHTML = `<div class="status-line">Token can write to ${GITHUB_OWNER}/${GITHUB_REPO}. Saving recipes should work.</div>`;
     }catch(e){
-      if(e.status === 404){
-        status.innerHTML = `<div class="status-line">Token works, and your recipe folder will be created on first save.</div>`;
-      }else{
-        status.innerHTML = `<div class="error-msg">GitHub test failed: ${escapeHtml(e.message || "token error")}</div>`;
-      }
+      status.innerHTML = `<div class="error-msg">GitHub test failed: ${escapeHtml(githubPermissionHint(e.message))}</div>`;
     }
   };
 }
