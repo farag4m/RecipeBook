@@ -1,0 +1,23 @@
+{
+  "id": "r1786157128829xsoo9",
+  "slug": "smoke-photo-match-1786157127411",
+  "title": "Smoke Photo Match 1786157127411",
+  "category": "Mains",
+  "servings": "1",
+  "contributor": "farag4m",
+  "author": "farag4m",
+  "ingredients": [
+    "1 cup rice"
+  ],
+  "steps": [
+    "Wash rice until water runs clear"
+  ],
+  "stepPhotos": [
+    {
+      "path": "photos/wash rice.png",
+      "name": "wash rice"
+    }
+  ],
+  "notes": "",
+  "updatedAt": "2026-08-08T02:45:28.829Z"
+}
