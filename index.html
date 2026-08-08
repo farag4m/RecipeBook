@@ -81,6 +81,22 @@
   .step-row{display:flex;align-items:flex-start;gap:10px;background:var(--paper);border:2.5px solid var(--ink);border-radius:10px;padding:9px 12px;font-size:13.5px;box-shadow:2px 2px 0 var(--ink);}
   .step-num{flex-shrink:0;background:var(--rule-red);color:#fff;border:2px solid var(--ink);border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-family:'Bangers';font-size:14px;}
   .step-emoji{font-size:18px;flex-shrink:0;}
+  .step-card{background:#f8f2e2;border:3px solid var(--ink);border-radius:22px;padding:18px;box-shadow:var(--shadow-sm);}
+  .step-header{display:flex;align-items:center;gap:14px;margin-bottom:12px;}
+  .step-number-big{width:48px;height:48px;background:var(--rule-red);border:3px solid var(--ink);border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Bangers';font-size:24px;flex-shrink:0;}
+  .step-title{font-family:'Bangers';font-size:23px;line-height:1.1;letter-spacing:.02em;color:var(--ink);}
+  .step-card img{display:block;width:100%;border:3px solid var(--ink);border-radius:12px;background:#fff;}
+  .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;}
+  .photo-card{background:var(--paper-raised);border:3px solid var(--ink);border-radius:10px;box-shadow:var(--shadow-sm);padding:10px;min-height:170px;}
+  .photo-card img{width:100%;aspect-ratio:1/1;object-fit:contain;background:var(--paper);border:2px solid var(--ink);border-radius:8px;display:block;}
+  .photo-card .photo-name{font-size:12px;color:var(--ink-soft);margin-top:8px;word-break:break-word;}
+  .photo-tools{grid-column:1/-1;background:#FFF0B8;border:3px dashed var(--ink);border-radius:10px;padding:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .choice-block{background:var(--paper);border:2.5px solid var(--ink);border-radius:10px;padding:12px;margin:12px 0;}
+  .choice-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:10px;}
+  .choice-option{border:2.5px solid var(--ink);border-radius:9px;background:#fff;padding:8px;cursor:pointer;box-shadow:2px 2px 0 var(--ink);}
+  .choice-option.selected{background:var(--butter);}
+  .choice-option img{width:100%;aspect-ratio:1/1;object-fit:contain;border:2px solid var(--ink);border-radius:6px;background:var(--paper);}
+  .choice-option span{display:block;font-size:11px;margin-top:6px;color:var(--ink-soft);word-break:break-word;}
   .modal .notes{color:var(--ink);font-size:13.5px;line-height:1.5;background:#FFF0B8;border:2px dashed var(--ink);padding:10px 12px;border-radius:8px;margin-top:14px;}
   .modal .footer-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:20px;font-size:12.5px;color:var(--ink-soft);}
   .modal-actions{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;}
@@ -147,6 +163,7 @@ const POLL_MS = 15000;
 const TOKEN_KEY = "family-recipe-box:github-token";
 const USER_KEY = "family-recipe-box:github-user";
 let recipes = [];
+let photos = [];
 let activeCat = "All";
 let searchTerm = "";
 let lastError = "";
@@ -175,14 +192,14 @@ function normalizeRecipe(r){
     title:String(r.title || "Untitled Recipe").trim() || "Untitled Recipe",
     category:CATEGORIES.includes(r.category) ? r.category : "Other",
     servings:String(r.servings || "").trim(),
-    contributor:String(r.contributor || "").trim(),
     contributor:String(r.contributor || r.author || "").trim(),
     ingredients:Array.isArray(r.ingredients) ? r.ingredients.map(String).filter(Boolean) : [],
     steps:Array.isArray(r.steps) ? r.steps.map(String).filter(Boolean) : [],
     notes:String(r.notes || "").trim(),
     slug:slugify(r.slug || r.title || "recipe"),
     author:String(r.author || r.contributor || "").trim(),
-    updatedAt:r.updatedAt || ""
+    updatedAt:r.updatedAt || "",
+    stepPhotos:Array.isArray(r.stepPhotos) ? r.stepPhotos : []
   };
 }
 
@@ -202,6 +219,7 @@ function recipeForStorage(recipe){
     author:r.author || githubUser || r.contributor,
     ingredients:r.ingredients,
     steps:r.steps,
+    stepPhotos:Array.isArray(r.stepPhotos) ? r.stepPhotos : [],
     notes:r.notes,
     updatedAt:new Date().toISOString()
   };
@@ -234,7 +252,18 @@ async function githubApi(path, options = {}, auth = false){
 }
 
 function rawUrl(path){
-  return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${DATA_BRANCH}/${path}?v=${Date.now()}`;
+  const encodedPath = String(path).split("/").map(encodeURIComponent).join("/");
+  return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${DATA_BRANCH}/${encodedPath}?v=${Date.now()}`;
+}
+
+function photoUrl(photo){
+  return rawUrl(photo.path);
+}
+
+function photoFromPath(path, sha){
+  const file = path.split("/").pop();
+  const name = file.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+  return {path, sha, file, name, slug:slugify(name), tokens:tokenize(name)};
 }
 
 async function loadRecipes(silent = false){
@@ -243,7 +272,12 @@ async function loadRecipes(silent = false){
   if(!silent) subcount.textContent = "syncing recipes...";
   try{
     const tree = await githubApi(`git/trees/${encodeURIComponent(DATA_BRANCH)}?recursive=1`, {}, Boolean(githubToken));
-    const files = (tree.tree || []).filter(item =>
+    const entries = tree.tree || [];
+    photos = entries
+      .filter(item => item.type === "blob" && /^photos\/[^/]+\.png$/i.test(item.path))
+      .map(item => photoFromPath(item.path, item.sha))
+      .sort((a,b) => a.name.localeCompare(b.name));
+    const files = entries.filter(item =>
       item.type === "blob" &&
       /^users\/[^/]+\/recipes\/[^/]+\.json$/.test(item.path)
     );
@@ -270,6 +304,36 @@ async function loadRecipes(silent = false){
     syncInFlight = false;
     render();
   }
+}
+
+async function uploadPhotoFile(file){
+  if(!requireGithubWrite()) return false;
+  if(!/\.png$/i.test(file.name)){
+    throw new Error("Only .png files can be uploaded.");
+  }
+  const base = slugify(file.name.replace(/\.png$/i, ""));
+  const path = `photos/${base}.png`;
+  const sha = await getFileSha(path);
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const content = String(dataUrl).split(",")[1];
+  const body = {
+    message:`Upload photo: ${file.name}`,
+    content,
+    branch:DATA_BRANCH
+  };
+  if(sha) body.sha = sha;
+  await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)
+  }, true);
+  await loadRecipes(true);
+  return true;
 }
 
 function startSyncTimer(){
@@ -398,6 +462,148 @@ function githubPermissionHint(message){
   return message || "GitHub error";
 }
 
+const STOP_WORDS = new Set([
+  "a","an","and","the","to","of","in","into","with","for","on","at","by","it","this","that",
+  "add","put","place","use","using","until","then","about","over","under","your","you",
+  "cup","cups","tbsp","tsp","teaspoon","tablespoon","tablespoons","ounces","ounce","oz",
+  "lb","lbs","pound","pounds","gram","grams","g","kg","ml","l","inch","small","large",
+  "medium","thinly","finely","roughly","optional"
+]);
+
+function singularizeWord(word){
+  if(word.length > 4 && word.endsWith("ies")) return word.slice(0, -3) + "y";
+  if(word.length > 3 && word.endsWith("es")) return word.slice(0, -2);
+  if(word.length > 3 && word.endsWith("s")) return word.slice(0, -1);
+  return word;
+}
+
+function tokenize(text){
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/)
+    .map(singularizeWord)
+    .filter(token => token.length > 1 && !STOP_WORDS.has(token));
+}
+
+function stepSearchText(step, recipe){
+  const stepTokens = new Set(tokenize(step));
+  const ingredientHits = (recipe.ingredients || []).filter(ingredient =>
+    tokenize(ingredient).some(token => stepTokens.has(token))
+  );
+  return [step, ...ingredientHits].join(" ");
+}
+
+function photoScore(searchText, photo){
+  const query = tokenize(searchText);
+  if(query.length === 0) return 0;
+  const photoTokens = photo.tokens || tokenize(photo.name);
+  let score = 0;
+  for(const token of query){
+    if(photoTokens.includes(token)) score += 3;
+    else if(photoTokens.some(p => p.includes(token) || token.includes(p))) score += 1;
+  }
+  return score;
+}
+
+function rankedPhotoMatches(step, recipe){
+  const search = stepSearchText(step, recipe);
+  return photos
+    .map(photo => ({photo, score:photoScore(search, photo)}))
+    .filter(match => match.score > 0)
+    .sort((a,b) => b.score - a.score || a.photo.name.localeCompare(b.photo.name));
+}
+
+function autoAssignStepPhotos(recipe){
+  const stepPhotos = [];
+  const ambiguous = [];
+  recipe.steps.forEach((step, idx) => {
+    const matches = rankedPhotoMatches(step, recipe);
+    if(matches.length === 0){
+      stepPhotos[idx] = null;
+      return;
+    }
+    const topScore = matches[0].score;
+    const topMatches = matches.filter(match => match.score === topScore);
+    if(topMatches.length === 1){
+      stepPhotos[idx] = topMatches[0].photo;
+    }else{
+      stepPhotos[idx] = topMatches[0].photo;
+      ambiguous.push({idx, step, matches:topMatches.map(match => match.photo)});
+    }
+  });
+  return {stepPhotos, ambiguous};
+}
+
+function chooseAmbiguousStepPhotos(recipe, assigned, ambiguous){
+  if(ambiguous.length === 0) return Promise.resolve(assigned);
+  return new Promise(resolve => {
+    const overlay = document.createElement("div");
+    overlay.className = "overlay";
+    const blocks = ambiguous.map(group => `
+      <div class="choice-block" data-step="${group.idx}">
+        <div class="field-label">Step ${group.idx + 1}</div>
+        <div>${escapeHtml(group.step)}</div>
+        <div class="choice-options">
+          ${group.matches.map((photo, photoIdx) => `
+            <div class="choice-option ${photoIdx === 0 ? "selected" : ""}" data-path="${escapeHtml(photo.path)}">
+              <img src="${escapeHtml(photoUrl(photo))}" alt="${escapeHtml(photo.name)}">
+              <span>${escapeHtml(photo.name)}</span>
+            </div>
+          `).join("")}
+          <div class="choice-option" data-path="">
+            <span>No photo</span>
+          </div>
+        </div>
+      </div>
+    `).join("");
+    overlay.innerHTML = `
+      <div class="modal wide">
+        <button class="modal-close">&times;</button>
+        <h2>Choose Step Photos</h2>
+        <div class="rule"></div>
+        <div class="hint">More than one photo matched these steps.</div>
+        ${blocks}
+        <div class="modal-actions">
+          <button class="btn-primary" id="photoChoiceSave">Use Selected Photos</button>
+          <button class="btn-ghost" id="photoChoiceCancel">Cancel Save</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll(".choice-option").forEach(option => {
+      option.onclick = () => {
+        const parent = option.closest(".choice-options");
+        parent.querySelectorAll(".choice-option").forEach(item => item.classList.remove("selected"));
+        option.classList.add("selected");
+      };
+    });
+    overlay.querySelector(".modal-close").onclick = () => { overlay.remove(); resolve(null); };
+    overlay.querySelector("#photoChoiceCancel").onclick = () => { overlay.remove(); resolve(null); };
+    overlay.querySelector("#photoChoiceSave").onclick = () => {
+      ambiguous.forEach(group => {
+        const selected = overlay.querySelector(`.choice-block[data-step="${group.idx}"] .choice-option.selected`);
+        const path = selected ? selected.dataset.path : "";
+        assigned[group.idx] = path ? photos.find(photo => photo.path === path) || null : null;
+      });
+      overlay.remove();
+      resolve(assigned);
+    };
+  });
+}
+
+async function resolveRecipeStepPhotos(recipe){
+  if(photos.length === 0){
+    recipe.stepPhotos = [];
+    return recipe;
+  }
+  const {stepPhotos, ambiguous} = autoAssignStepPhotos(recipe);
+  const chosen = await chooseAmbiguousStepPhotos(recipe, stepPhotos, ambiguous);
+  if(!chosen) return null;
+  recipe.stepPhotos = chosen.map(photo => photo ? {path:photo.path, name:photo.name} : null);
+  return recipe;
+}
+
 const ING_ICONS = [
   [/egg/i,"🥚"],[/flour/i,"🌾"],[/sugar/i,"🍬"],[/butter/i,"🧈"],[/milk|cream/i,"🥛"],
   [/cheese/i,"🧀"],[/chicken/i,"🍗"],[/beef|steak/i,"🥩"],[/pork|bacon/i,"🥓"],[/fish|salmon|shrimp/i,"🐟"],
@@ -421,10 +627,17 @@ function guessStepIcon(text){
 }
 
 function render(){
+  if(activeCat === "__photos"){
+    renderPhotoLibrary();
+    return;
+  }
   const counts = {};
   CATEGORIES.forEach(c => counts[c] = 0);
   recipes.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1; });
-  tabsEl.innerHTML = ["All", ...CATEGORIES].map(c => {
+  tabsEl.innerHTML = ["All", "__photos", ...CATEGORIES].map(c => {
+    if(c === "__photos"){
+      return `<div class="tab ${activeCat === c ? "active" : ""}" data-cat="${c}"><span class="tab-icon">📷</span> <span class="count">${photos.length}</span></div>`;
+    }
     const n = c === "All" ? recipes.length : (counts[c] || 0);
     const icon = c === "All" ? "🍽️" : CAT_ICON[c];
     return `<div class="tab ${activeCat === c ? "active" : ""}" data-cat="${c}"><span class="tab-icon">${icon}</span> <span class="count">${n}</span></div>`;
@@ -454,6 +667,57 @@ function render(){
     </div>
   `).join("");
   grid.querySelectorAll(".card").forEach(c => c.onclick = () => openView(c.dataset.id));
+}
+
+function renderPhotoLibrary(){
+  tabsEl.innerHTML = ["All", "__photos", ...CATEGORIES].map(c => {
+    if(c === "__photos"){
+      return `<div class="tab active" data-cat="${c}"><span class="tab-icon">📷</span> <span class="count">${photos.length}</span></div>`;
+    }
+    const n = c === "All" ? recipes.length : recipes.filter(r => r.category === c).length;
+    const icon = c === "All" ? "🍽️" : CAT_ICON[c];
+    return `<div class="tab" data-cat="${c}"><span class="tab-icon">${icon}</span> <span class="count">${n}</span></div>`;
+  }).join("");
+  tabsEl.querySelectorAll(".tab").forEach(t => t.onclick = () => { activeCat = t.dataset.cat; render(); });
+  subcount.innerHTML = `${photos.length} photo${photos.length === 1 ? "" : "s"} in GitHub <span class="sync-pill">${lastSyncAt ? "synced " + lastSyncAt.toLocaleTimeString() : "syncing"}</span>`;
+  const q = searchTerm.trim().toLowerCase();
+  const filtered = q ? photos.filter(photo => photo.name.toLowerCase().includes(q)) : photos;
+  grid.innerHTML = `
+    <div class="photo-tools">
+      <input type="file" id="photoUploadInput" accept="image/png" multiple>
+      <button class="btn-primary" id="photoUploadBtn">Upload PNG</button>
+      <span class="hint">Filenames are used for matching. Example: "cutting onions.png" matches onion cutting steps.</span>
+      <div id="photoUploadStatus"></div>
+    </div>
+    ${filtered.length ? filtered.map(photo => `
+      <div class="photo-card">
+        <img src="${escapeHtml(photoUrl(photo))}" alt="${escapeHtml(photo.name)}">
+        <div class="photo-name">${escapeHtml(photo.name)}</div>
+      </div>
+    `).join("") : `<div class="empty"><b>No photos yet</b>Upload PNG step photos to start matching recipes.</div>`}
+  `;
+  const uploadBtn = document.getElementById("photoUploadBtn");
+  const input = document.getElementById("photoUploadInput");
+  const status = document.getElementById("photoUploadStatus");
+  uploadBtn.onclick = async () => {
+    if(!requireGithubWrite()) return;
+    const files = Array.from(input.files || []);
+    if(files.length === 0){
+      status.innerHTML = `<div class="error-msg">Choose one or more PNG files.</div>`;
+      return;
+    }
+    uploadBtn.disabled = true;
+    status.innerHTML = `<div class="status-line">Uploading ${files.length} photo${files.length === 1 ? "" : "s"}...</div>`;
+    try{
+      for(const file of files) await uploadPhotoFile(file);
+      showToast(`Uploaded ${files.length} photo${files.length === 1 ? "" : "s"}`);
+      activeCat = "__photos";
+      renderPhotoLibrary();
+    }catch(e){
+      uploadBtn.disabled = false;
+      status.innerHTML = `<div class="error-msg">Upload failed: ${escapeHtml(githubPermissionHint(e.message))}</div>`;
+    }
+  };
 }
 
 function showToast(msg){
@@ -501,6 +765,24 @@ async function shareRecipe(recipe){
   showToast("Share link copied");
 }
 
+function renderStepDisplay(recipe){
+  return recipe.steps.map((step, idx) => {
+    const photo = recipe.stepPhotos && recipe.stepPhotos[idx];
+    if(photo && photo.path){
+      return `
+        <div class="step-card">
+          <div class="step-header">
+            <div class="step-number-big">${idx + 1}</div>
+            <div class="step-title">${escapeHtml(step)}</div>
+          </div>
+          <img src="${escapeHtml(rawUrl(photo.path))}" alt="${escapeHtml(photo.name || "Step " + (idx + 1))}">
+        </div>
+      `;
+    }
+    return `<div class="step-row"><span class="step-num">${idx + 1}</span><span class="step-emoji">${guessStepIcon(step)}</span><span>${escapeHtml(step)}</span></div>`;
+  }).join("");
+}
+
 function openView(id){
   const r = recipes.find(x => x.id === id);
   if(!r) return;
@@ -515,7 +797,7 @@ function openView(id){
       <div class="field-label">Ingredients</div>
       <div class="ing-grid">${r.ingredients.map(i => `<div class="ing-chip"><span class="ing-emoji">${guessIcon(i)}</span>${escapeHtml(i)}</div>`).join("")}</div>
       <div class="field-label">Steps</div>
-      <div class="step-list">${r.steps.map((s, idx) => `<div class="step-row"><span class="step-num">${idx + 1}</span><span class="step-emoji">${guessStepIcon(s)}</span><span>${escapeHtml(s)}</span></div>`).join("")}</div>
+      <div class="step-list">${renderStepDisplay(r)}</div>
       ${r.notes ? `<div class="notes">${escapeHtml(r.notes)}</div>` : ""}
       <div class="footer-row">
         <span>${r.servings ? "Serves " + escapeHtml(r.servings) : ""}</span>
@@ -622,8 +904,16 @@ function openForm(existing, prefill){
     try{
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving...";
+      statusEl.innerHTML = `<div class="status-line">Matching step photos...</div>`;
+      const resolved = await resolveRecipeStepPhotos(rec);
+      if(!resolved){
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Recipe";
+        statusEl.innerHTML = `<div class="status-line">Save cancelled.</div>`;
+        return;
+      }
       statusEl.innerHTML = `<div class="status-line">Saving to GitHub...</div>`;
-      const saved = await saveRecipeToGithub(rec, existing);
+      const saved = await saveRecipeToGithub(resolved, existing);
       if(saved){
         overlay.remove();
         showToast(`Saved "${rec.title}"`);
