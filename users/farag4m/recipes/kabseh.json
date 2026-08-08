@@ -1,0 +1,80 @@
+{
+  "format": "family-recipe-box.recipe.v1",
+  "id": "r1786161230007jdgiy",
+  "slug": "kabseh",
+  "title": "Kabseh",
+  "category": "Mains",
+  "servings": "",
+  "contributor": "farag4m",
+  "author": "farag4m",
+  "ingredients": [
+    {
+      "text": "6 boneless chicken thighs",
+      "step": {
+        "title": "Pressure cook chicken",
+        "text": "Add chicken thighs to the pressure cooker with just enough water to reach the chicken surface. Add allspice, salt, black pepper, kabsa spices, and a little paprika. Pressure cook for 15 minutes.",
+        "image": {
+          "path": "photos/pressure cook it.png",
+          "name": "pressure cook it"
+        }
+      }
+    },
+    {
+      "text": "Water, just enough to reach the chicken surface",
+      "step": {
+        "title": "Remove broth",
+        "text": "Take all the water out of the pot, leaving the chicken in the pot."
+      }
+    },
+    {
+      "text": "Allspice, salt, black pepper, kabsa spices, little paprika",
+      "step": {
+        "title": "Brown chicken",
+        "text": "Switch to saute mode and cook until the edges of the chicken get some color.",
+        "image": {
+          "path": "photos/add chicken.png",
+          "name": "add chicken"
+        }
+      }
+    },
+    {
+      "text": "Onions",
+      "step": {
+        "title": "Saute aromatics",
+        "text": "Add onions, add spices again, add tomato paste, and saute everything together with the chicken.",
+        "image": {
+          "path": "photos/saute onions.png",
+          "name": "saute onions"
+        }
+      }
+    },
+    {
+      "text": "Tomato paste",
+      "step": {
+        "title": "Add rice",
+        "text": "Add 3 cups water and 3 cups rice to the pot using a 1:1 ratio.",
+        "image": {
+          "path": "photos/add water.png",
+          "name": "add water"
+        }
+      }
+    },
+    {
+      "text": "3 cups water",
+      "step": {
+        "title": "Final cook",
+        "text": "Pressure cook for 5 minutes, then natural release for 10 minutes.",
+        "image": {
+          "path": "photos/cooked rice.png",
+          "name": "cooked rice"
+        }
+      }
+    },
+    {
+      "text": "3 cups rice"
+    }
+  ],
+  "steps": [],
+  "notes": "Original feedback: chicken tasted awful; rice did not have any taste. Consider increasing salt and kabsa spice in both the broth and rice stage, blooming the spices with the onions and tomato paste, and browning the chicken more deeply before adding rice.",
+  "updatedAt": "2026-08-08T03:54:24.892Z"
+}
