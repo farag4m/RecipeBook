@@ -1,0 +1,31 @@
+{
+  "format": "family-recipe-box.recipe.v1",
+  "id": "r17861578603377qg75",
+  "slug": "smoke-json-import-1786157852070",
+  "title": "Smoke JSON Import 1786157852070",
+  "category": "Mains",
+  "servings": "2",
+  "contributor": "farag4m",
+  "author": "farag4m",
+  "ingredients": [
+    {
+      "text": "1 cup basmati rice",
+      "step": {
+        "title": "Wash rice",
+        "text": "Rinse rice until the water runs clear.",
+        "image": {
+          "path": "photos/wash rice.png",
+          "name": "wash rice"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "title": "Serve",
+      "text": "Serve warm."
+    }
+  ],
+  "notes": "Smoke import",
+  "updatedAt": "2026-08-08T02:57:40.337Z"
+}
