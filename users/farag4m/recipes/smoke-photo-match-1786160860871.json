@@ -1,0 +1,26 @@
+{
+  "format": "family-recipe-box.recipe.v1",
+  "id": "r17861608656363dflb",
+  "slug": "smoke-photo-match-1786160860871",
+  "title": "Smoke Photo Match 1786160860871",
+  "category": "Mains",
+  "servings": "1",
+  "contributor": "farag4m",
+  "author": "farag4m",
+  "ingredients": [
+    {
+      "text": "1 cup rice",
+      "step": {
+        "title": "Wash rice until water runs clear",
+        "text": "Wash rice until water runs clear",
+        "image": {
+          "path": "photos/wash rice.png",
+          "name": "wash rice"
+        }
+      }
+    }
+  ],
+  "steps": [],
+  "notes": "",
+  "updatedAt": "2026-08-08T03:47:45.637Z"
+}
