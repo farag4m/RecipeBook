@@ -1,0 +1,126 @@
+{
+  "format": "family-recipe-box.recipe.v1",
+  "id": "r1786831790297bikfa",
+  "slug": "chicken-alfredo-fettuccine",
+  "title": "Chicken Alfredo Fettuccine",
+  "category": "Mains",
+  "servings": "4",
+  "contributor": "farag4m",
+  "author": "farag4m",
+  "ingredients": [
+    {
+      "text": "Boneless, skinless chicken breasts",
+      "step": {
+        "title": "Season chicken",
+        "text": "Season both sides with salt, black pepper, paprika, garlic powder, onion powder, and Italian seasoning. Let rest for about 10 minutes.",
+        "image": {
+          "path": "photos/baking powder.png",
+          "name": "baking powder"
+        }
+      }
+    },
+    {
+      "text": "1 onion, diced",
+      "step": {
+        "title": "Saute onion and garlic",
+        "text": "Using Saute mode, cook the diced onion in butter or oil for 4–5 minutes until softened. Add minced garlic and cook for another 30–60 seconds.",
+        "image": {
+          "path": "photos/saute onions.png",
+          "name": "saute onions"
+        }
+      }
+    },
+    {
+      "text": "Rao's Homemade Roasted Garlic Alfredo Sauce",
+      "step": {
+        "title": "Make Alfredo sauce",
+        "text": "Add the Alfredo sauce to the onion and garlic. Heat on low Saute for about 3 minutes, stirring frequently.",
+        "image": {
+          "path": "photos/saute onions.png",
+          "name": "saute onions"
+        }
+      }
+    },
+    {
+      "text": "16 oz dry fettuccine",
+      "step": {
+        "title": "Prepare fettuccine",
+        "text": "Break the fettuccine in half and arrange it loosely in crisscross layers in the pressure cooker. Add enough clean water to cover it by about 1/2 inch and add about 1 tsp salt.",
+        "image": {
+          "path": "photos/add water.png",
+          "name": "add water"
+        }
+      }
+    },
+    {
+      "text": "Garlic, minced",
+      "step": {
+        "title": "Pressure cook chicken",
+        "text": "Add 1 cup water and the seasoned chicken to the pressure cooker. Pressure cook on High for 10–15 minutes. Natural release for 5 minutes, then release the remaining pressure. Remove the chicken and reserve the broth.",
+        "image": {
+          "path": "photos/pressure cook it.png",
+          "name": "pressure cook it"
+        }
+      }
+    },
+    {
+      "text": "Salt",
+      "step": {
+        "title": "Brown chicken",
+        "text": "Empty the pressure cooker, switch to Saute, and add butter or oil. Brown the chicken for about 3–4 minutes per side, then remove it.",
+        "image": {
+          "path": "photos/add chicken.png",
+          "name": "add chicken"
+        }
+      }
+    },
+    {
+      "text": "Black pepper",
+      "step": {
+        "title": "Coat chicken in Alfredo",
+        "text": "Add the browned chicken to the Alfredo sauce and warm for 2–3 minutes, coating it well. Transfer the chicken and sauce to a covered container and set aside.",
+        "image": {
+          "path": "photos/add chicken.png",
+          "name": "add chicken"
+        }
+      }
+    },
+    {
+      "text": "Paprika",
+      "step": {
+        "title": "Cook fettuccine",
+        "text": "Pressure cook the prepared fettuccine on High for 4 minutes, then immediately quick release. If slightly firm, let it sit in the hot water for 1–2 minutes, then drain.",
+        "image": {
+          "path": "photos/pressure cook it.png",
+          "name": "pressure cook it"
+        }
+      }
+    },
+    {
+      "text": "Garlic powder",
+      "step": {
+        "title": "Combine",
+        "text": "Return the drained fettuccine to the pressure cooker. Add the Alfredo sauce and toss gently until coated, then add the chicken. If the sauce is too thick, add a small splash of reserved chicken broth or water.",
+        "image": {
+          "path": "photos/add chicken.png",
+          "name": "add chicken"
+        }
+      }
+    },
+    {
+      "text": "Onion powder"
+    },
+    {
+      "text": "Italian seasoning or oregano"
+    },
+    {
+      "text": "Butter or cooking oil"
+    },
+    {
+      "text": "Water"
+    }
+  ],
+  "steps": [],
+  "notes": "Pressure-cooker-only recipe. Chicken breasts are preferred. Use the pressure cooker's Saute mode for browning the chicken and cooking the onion, garlic, and Alfredo sauce.",
+  "updatedAt": "2026-08-15T22:10:05.982Z"
+}
