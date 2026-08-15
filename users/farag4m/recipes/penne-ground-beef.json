@@ -1,0 +1,101 @@
+{
+  "format": "family-recipe-box.recipe.v1",
+  "id": "r1786831891096p91qo",
+  "slug": "penne-ground-beef",
+  "title": "Penne & Ground Beef",
+  "category": "Mains",
+  "servings": "4",
+  "contributor": "farag4m",
+  "author": "farag4m",
+  "ingredients": [
+    {
+      "text": "1 medium onion, diced",
+      "step": {
+        "title": "Saute onions",
+        "text": "Using Saute mode, heat 1 tbsp olive oil and cook the diced onion for 3–4 minutes until soft.",
+        "image": {
+          "path": "photos/saute onions.png",
+          "name": "saute onions"
+        }
+      }
+    },
+    {
+      "text": "1 lb ground beef",
+      "step": {
+        "title": "Brown and season beef",
+        "text": "Add the ground beef, break it apart, and cook for 4–5 minutes until lightly browned. Add salt, black pepper, garlic powder, paprika, and optional onion powder and red pepper flakes. Saute for another minute.",
+        "image": {
+          "path": "photos/baking powder.png",
+          "name": "baking powder"
+        }
+      }
+    },
+    {
+      "text": "16 oz penne",
+      "step": {
+        "title": "Add penne",
+        "text": "Pour in 4 cups water and scrape the bottom of the pot well. Add the dry penne and gently press it down so it touches the liquid. Do not stir heavily.",
+        "image": {
+          "path": "photos/add water.png",
+          "name": "add water"
+        }
+      }
+    },
+    {
+      "text": "10–12 oz pesto",
+      "step": {
+        "title": "Add pesto",
+        "text": "Add the pesto to the cooked pasta and beef. Stir well until everything is evenly coated.",
+        "image": {
+          "path": "photos/cooked rice.png",
+          "name": "cooked rice"
+        }
+      }
+    },
+    {
+      "text": "1 tbsp olive oil",
+      "step": {
+        "title": "Pressure cook",
+        "text": "Pressure cook on High for 5 minutes, then immediately quick release.",
+        "image": {
+          "path": "photos/pressure cook it.png",
+          "name": "pressure cook it"
+        }
+      }
+    },
+    {
+      "text": "1.5 tsp salt",
+      "step": {
+        "title": "Finish",
+        "text": "Stir in the pesto until the pasta and beef are fully coated. If desired, add Parmesan and a small splash of cream. Serve warm."
+      }
+    },
+    {
+      "text": "1 tsp black pepper"
+    },
+    {
+      "text": "1.5 tsp garlic powder"
+    },
+    {
+      "text": "1 tsp paprika"
+    },
+    {
+      "text": "1 tsp onion powder, optional"
+    },
+    {
+      "text": "1/4 tsp red pepper flakes, optional"
+    },
+    {
+      "text": "4 cups water"
+    },
+    {
+      "text": "2–4 tbsp Parmesan, optional"
+    },
+    {
+      "text": "Splash of cream, optional"
+    }
+  ],
+  "steps": [],
+  "notes": "Pressure-cooker-only recipe. Keep the pasta mostly on top of the beef before pressure cooking and avoid heavily stirring it into the liquid.",
+  "updatedAt": "2026-08-15T22:11:42.398Z"
+}
