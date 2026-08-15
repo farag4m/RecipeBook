@@ -1,0 +1,75 @@
+{
+  "format": "family-recipe-box.recipe.v1",
+  "id": "r1786831691414aubds",
+  "slug": "mujadara",
+  "title": "Mujadara",
+  "category": "Mains",
+  "servings": "4",
+  "contributor": "farag4m",
+  "author": "farag4m",
+  "ingredients": [
+    {
+      "text": "2 large onions, thinly sliced",
+      "step": {
+        "title": "Saute onions",
+        "text": "Using Saute mode, cook the sliced onions in 3 tbsp olive oil until deep golden brown. Remove and set aside.",
+        "image": {
+          "path": "photos/saute onions.png",
+          "name": "saute onions"
+        }
+      }
+    },
+    {
+      "text": "1 cup brown or green lentils",
+      "step": {
+        "title": "Cook lentils",
+        "text": "Add the lentils, 1.5 cups water, 1/2 tsp salt, and cumin. Pressure cook on High for 5 minutes, then quick release.",
+        "image": {
+          "path": "photos/rinse lentiles.png",
+          "name": "rinse lentiles"
+        }
+      }
+    },
+    {
+      "text": "2 cups rice, rinsed",
+      "step": {
+        "title": "Add rice",
+        "text": "Add the rinsed rice, 3 cups water, remaining salt, black pepper if using, and a drizzle of olive oil. Stir once.",
+        "image": {
+          "path": "photos/wash rice.png",
+          "name": "wash rice"
+        }
+      }
+    },
+    {
+      "text": "3 tbsp olive oil",
+      "step": {
+        "title": "Final cook",
+        "text": "Pressure cook on High for 8 minutes, then natural release for 10 minutes.",
+        "image": {
+          "path": "photos/pressure cook it.png",
+          "name": "pressure cook it"
+        }
+      }
+    },
+    {
+      "text": "1.5 tsp salt, divided",
+      "step": {
+        "title": "Add onions and serve",
+        "text": "Fluff the rice and lentils. Mix most of the browned onions into the Mujadara, then top with the remaining onions and serve warm."
+      }
+    },
+    {
+      "text": "1 tsp ground cumin"
+    },
+    {
+      "text": "1/2 tsp black pepper, optional"
+    },
+    {
+      "text": "4.5 cups water, divided"
+    }
+  ],
+  "steps": [],
+  "notes": "Pressure-cooker-only recipe. Use the pressure cooker's Saute mode for the onions.",
+  "updatedAt": "2026-08-15T22:08:38.966Z"
+}
