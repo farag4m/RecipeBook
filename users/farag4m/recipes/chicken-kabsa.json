@@ -1,0 +1,129 @@
+{
+  "format": "family-recipe-box.recipe.v1",
+  "id": "r1786831855813e1x7u",
+  "slug": "chicken-kabsa",
+  "title": "Chicken Kabsa",
+  "category": "Mains",
+  "servings": "6",
+  "contributor": "farag4m",
+  "author": "farag4m",
+  "ingredients": [
+    {
+      "text": "6 boneless chicken thighs",
+      "step": {
+        "title": "Season chicken",
+        "text": "Season the chicken generously with salt, black pepper, allspice, Kabsa spices, and a little paprika.",
+        "image": {
+          "path": "photos/add spices.png",
+          "name": "add spices"
+        }
+      }
+    },
+    {
+      "text": "1 large onion, diced",
+      "step": {
+        "title": "Saute onion and garlic",
+        "text": "Using Saute mode, cook the diced onion in a little oil until softened. Add minced garlic and cook for another 30–60 seconds.",
+        "image": {
+          "path": "photos/saute onions.png",
+          "name": "saute onions"
+        }
+      }
+    },
+    {
+      "text": "Tomato paste and tomato sauce",
+      "step": {
+        "title": "Make Kabsa sauce",
+        "text": "Add tomato paste and saute for 1–2 minutes. Add tomato sauce, Kabsa spices, allspice, black pepper, paprika, and salt. Saute until fragrant and well combined.",
+        "image": {
+          "path": "photos/tomato paste.png",
+          "name": "tomato paste"
+        }
+      }
+    },
+    {
+      "text": "3 cups rice, rinsed",
+      "step": {
+        "title": "Add rice",
+        "text": "Mix the reserved chicken broth with the Kabsa sauce, adding water as needed to make about 3 cups total liquid. Add 3 cups rinsed rice and stir once.",
+        "image": {
+          "path": "photos/tomato paste.png",
+          "name": "tomato paste"
+        }
+      }
+    },
+    {
+      "text": "Garlic, minced",
+      "step": {
+        "title": "Pressure cook chicken",
+        "text": "Place the seasoned chicken in the pressure cooker and add enough water to approximately reach the surface of the chicken. Pressure cook on High for 15 minutes. Remove the chicken and reserve all of the broth.",
+        "image": {
+          "path": "photos/add chicken.png",
+          "name": "add chicken"
+        }
+      }
+    },
+    {
+      "text": "Tomato paste",
+      "step": {
+        "title": "Saute chicken in Kabsa sauce",
+        "text": "Return the chicken to the prepared Kabsa sauce. Saute until the chicken is well coated and picks up some color, then remove the chicken and set aside.",
+        "image": {
+          "path": "photos/add chicken.png",
+          "name": "add chicken"
+        }
+      }
+    },
+    {
+      "text": "Tomato sauce",
+      "step": {
+        "title": "Prepare rice",
+        "text": "Add the reserved chicken broth to the Kabsa sauce remaining in the pot. Add water as needed to make about 3 cups total liquid, then add the rinsed rice and stir once.",
+        "image": {
+          "path": "photos/tomato paste.png",
+          "name": "tomato paste"
+        }
+      }
+    },
+    {
+      "text": "Kabsa spices",
+      "step": {
+        "title": "Add chicken",
+        "text": "Place the Kabsa-coated chicken on top of the rice.",
+        "image": {
+          "path": "photos/cooked rice.png",
+          "name": "cooked rice"
+        }
+      }
+    },
+    {
+      "text": "Allspice",
+      "step": {
+        "title": "Final cook",
+        "text": "Pressure cook on High for 5 minutes, then natural release for 10 minutes. Fluff the rice and serve with the chicken on top.",
+        "image": {
+          "path": "photos/cooked rice.png",
+          "name": "cooked rice"
+        }
+      }
+    },
+    {
+      "text": "Black pepper"
+    },
+    {
+      "text": "Paprika"
+    },
+    {
+      "text": "Salt"
+    },
+    {
+      "text": "Cooking oil"
+    },
+    {
+      "text": "Water"
+    }
+  ],
+  "steps": [],
+  "notes": "Pressure-cooker-only recipe. The onion, garlic, tomato paste, tomato sauce, and spices form the Kabsa sauce. The reserved chicken broth is mixed with this sauce and used to cook the rice so the rice absorbs the chicken and Kabsa flavors.",
+  "updatedAt": "2026-08-15T22:11:03.715Z"
+}
