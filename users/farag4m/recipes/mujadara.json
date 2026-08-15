@@ -1,0 +1,171 @@
+{
+  "format": "family-recipe-box.recipe.v1",
+  "id": "r1786831138015zk986",
+  "slug": "mujadara",
+  "title": "Mujadara",
+  "category": "Mains",
+  "servings": "4",
+  "contributor": "farag4m",
+  "author": "farag4m",
+  "ingredients": [
+    {
+      "text": "1 cup brown or green lentils",
+      "step": {
+        "title": "Slice onions",
+        "text": "Thinly slice the onions.",
+        "image": {
+          "path": "photos/cutting onions.png",
+          "name": "cutting onions"
+        }
+      }
+    },
+    {
+      "text": "2 cups rice, rinsed",
+      "step": {
+        "title": "Saute onions",
+        "text": "Set the pressure cooker to Saute. Add olive oil and the sliced onions.",
+        "image": {
+          "path": "photos/saute onions.png",
+          "name": "saute onions"
+        }
+      }
+    },
+    {
+      "text": "2 large onions, thinly sliced",
+      "step": {
+        "title": "Brown onions",
+        "text": "Cook the onions until deeply golden and caramelized, stirring regularly.",
+        "image": {
+          "path": "photos/saute onions.png",
+          "name": "saute onions"
+        }
+      }
+    },
+    {
+      "text": "1.5 cups water for the lentils",
+      "step": {
+        "title": "Remove onions",
+        "text": "Remove most of the browned onions and set them aside. Leave a small amount in the pressure cooker.",
+        "image": {
+          "path": "photos/saute onions.png",
+          "name": "saute onions"
+        }
+      }
+    },
+    {
+      "text": "3 cups water for the rice",
+      "step": {
+        "title": "Add lentils",
+        "text": "Add 1 cup lentils to the pressure cooker.",
+        "image": {
+          "path": "photos/rinse lentiles.png",
+          "name": "rinse lentiles"
+        }
+      }
+    },
+    {
+      "text": "Olive oil",
+      "step": {
+        "title": "Season lentils",
+        "text": "Add 1/2 teaspoon salt and cumin."
+      }
+    },
+    {
+      "text": "Salt, divided",
+      "step": {
+        "title": "Add lentil water",
+        "text": "Pour in 1.5 cups water.",
+        "image": {
+          "path": "photos/add water.png",
+          "name": "add water"
+        }
+      }
+    },
+    {
+      "text": "Cumin",
+      "step": {
+        "title": "Pressure cook lentils",
+        "text": "Pressure cook on High for 5 minutes.",
+        "image": {
+          "path": "photos/pressure cook it.png",
+          "name": "pressure cook it"
+        }
+      }
+    },
+    {
+      "text": "Black pepper, optional",
+      "step": {
+        "title": "Release pressure",
+        "text": "Perform a quick release."
+      }
+    }
+  ],
+  "steps": [
+    {
+      "title": "Add rice",
+      "text": "Add 2 cups rinsed rice to the cooked lentils.",
+      "image": {
+        "path": "photos/cooked rice.png",
+        "name": "cooked rice"
+      }
+    },
+    {
+      "title": "Add rice water",
+      "text": "Pour in 3 cups water.",
+      "image": {
+        "path": "photos/add water.png",
+        "name": "add water"
+      }
+    },
+    {
+      "title": "Season rice",
+      "text": "Add the remaining salt, cumin, black pepper if desired, and a small drizzle of olive oil.",
+      "image": {
+        "path": "photos/add oil.png",
+        "name": "add oil"
+      }
+    },
+    {
+      "title": "Stir",
+      "text": "Stir the rice and lentils together once.",
+      "image": {
+        "path": "photos/rinse lentiles.png",
+        "name": "rinse lentiles"
+      }
+    },
+    {
+      "title": "Final pressure cook",
+      "text": "Pressure cook on High for 8 minutes.",
+      "image": {
+        "path": "photos/pressure cook it.png",
+        "name": "pressure cook it"
+      }
+    },
+    {
+      "title": "Natural release",
+      "text": "Let the pressure release naturally for 10 minutes, then release any remaining pressure.",
+      "image": {
+        "path": "photos/pressure cook it.png",
+        "name": "pressure cook it"
+      }
+    },
+    {
+      "title": "Add onions",
+      "text": "Add most of the reserved browned onions back to the cooked rice and lentils.",
+      "image": {
+        "path": "photos/cooked rice.png",
+        "name": "cooked rice"
+      }
+    },
+    {
+      "title": "Mix",
+      "text": "Gently fluff and mix everything together."
+    },
+    {
+      "title": "Serve",
+      "text": "Serve warm with the remaining browned onions on top."
+    }
+  ],
+  "notes": "Pressure-cooker-only recipe. The pressure cooker's Saute function is used for the onions.",
+  "updatedAt": "2026-08-15T21:59:19.516Z"
+}
