@@ -14,8 +14,8 @@
         "title": "Cut chicken breasts into cubes.",
         "text": "Cut chicken breasts into cubes.",
         "image": {
-          "path": "photos/add chicken.png",
-          "name": "add chicken"
+          "path": "photos/cut-chicken-into-cubes.png",
+          "name": "cut chicken into cubes"
         }
       }
     },
@@ -25,8 +25,8 @@
         "title": "If possible, soak the chicken in curry powder and soy sauce for a while so it absorbs the flavor.",
         "text": "If possible, soak the chicken in curry powder and soy sauce for a while so it absorbs the flavor.",
         "image": {
-          "path": "photos/add chicken.png",
-          "name": "add chicken"
+          "path": "photos/add-sauce-to-the-chicken.png",
+          "name": "add sauce to the chicken"
         }
       }
     },
@@ -36,8 +36,8 @@
         "title": "Add soy sauce to the chicken along with the curry powder and mix well.",
         "text": "Add soy sauce to the chicken along with the curry powder and mix well.",
         "image": {
-          "path": "photos/add chicken.png",
-          "name": "add chicken"
+          "path": "photos/soya-sauce.png",
+          "name": "soya sauce"
         }
       }
     },
@@ -58,8 +58,8 @@
         "title": "Add the chicken to the onions and season with salt and pepper.",
         "text": "Add the chicken to the onions and season with salt and pepper.",
         "image": {
-          "path": "photos/saute onions.png",
-          "name": "saute onions"
+          "path": "photos/saute-chicken-with-onions.png",
+          "name": "saute chicken with onions"
         }
       }
     },
@@ -69,8 +69,8 @@
         "title": "Once the chicken is fully cooked, add the washed frozen carrots and peas.",
         "text": "Once the chicken is fully cooked, add the washed frozen carrots and peas.",
         "image": {
-          "path": "photos/add chicken.png",
-          "name": "add chicken"
+          "path": "photos/add-veggies-to-chicken.png",
+          "name": "add veggies to chicken"
         }
       }
     },
@@ -80,8 +80,8 @@
         "title": "Add the canned mini corn and mix everything together.",
         "text": "Add the canned mini corn and mix everything together.",
         "image": {
-          "path": "photos/cornstarch.png",
-          "name": "cornstarch"
+          "path": "photos/add-veggies-to-chicken.png",
+          "name": "add veggies to chicken"
         }
       }
     },
@@ -156,8 +156,8 @@
       "title": "Pour the creamy sauce directly into the pot with the chicken and vegetables. Mix everything together and let it cook until the sauce is well combined and everything is heated through.",
       "text": "Pour the creamy sauce directly into the pot with the chicken and vegetables. Mix everything together and let it cook until the sauce is well combined and everything is heated through.",
       "image": {
-        "path": "photos/add chicken.png",
-        "name": "add chicken"
+        "path": "photos/chicken-in-creamy-sauce.png",
+        "name": "chicken in creamy sauce"
       }
     },
     {
@@ -170,5 +170,5 @@
     }
   ],
   "notes": "Use cold water when mixing with flour to prevent lumps. The sauce can be prepared separately, but the family method is to add it directly to the chicken and vegetables and let everything cook together.",
-  "updatedAt": "2026-08-20T00:38:39.786Z"
+  "updatedAt": "2026-08-20T01:52:13.847Z"
 }
