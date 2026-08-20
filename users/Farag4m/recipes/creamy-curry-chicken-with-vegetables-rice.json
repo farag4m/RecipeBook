@@ -1,8 +1,8 @@
 {
   "format": "family-recipe-box.recipe.v1",
   "id": "r1787184050274y9e9z",
-  "slug": "creamy-curry-chicken-with-vegetables-rice",
-  "title": "Creamy Curry Chicken with Vegetables & Rice",
+  "slug": "chinese",
+  "title": "Chinese",
   "category": "Mains",
   "servings": "4",
   "contributor": "Family Recipe",
@@ -36,8 +36,8 @@
         "title": "Add soy sauce to the chicken along with the curry powder and mix well.",
         "text": "Add soy sauce to the chicken along with the curry powder and mix well.",
         "image": {
-          "path": "photos/soya-sauce.png",
-          "name": "soya sauce"
+          "path": "photos/add-sauce-to-the-chicken.png",
+          "name": "add sauce to the chicken"
         }
       }
     },
@@ -47,8 +47,8 @@
         "title": "Quickly sauté the onions in a little vegetable oil until softened. There is no need to brown them.",
         "text": "Quickly sauté the onions in a little vegetable oil until softened. There is no need to brown them.",
         "image": {
-          "path": "photos/saute onions.png",
-          "name": "saute onions"
+          "path": "photos/saute-chicken-with-onions.png",
+          "name": "saute chicken with onions"
         }
       }
     },
@@ -69,8 +69,8 @@
         "title": "Once the chicken is fully cooked, add the washed frozen carrots and peas.",
         "text": "Once the chicken is fully cooked, add the washed frozen carrots and peas.",
         "image": {
-          "path": "photos/add-veggies-to-chicken.png",
-          "name": "add veggies to chicken"
+          "path": "photos/add chicken.png",
+          "name": "add chicken"
         }
       }
     },
@@ -80,8 +80,8 @@
         "title": "Add the canned mini corn and mix everything together.",
         "text": "Add the canned mini corn and mix everything together.",
         "image": {
-          "path": "photos/add-veggies-to-chicken.png",
-          "name": "add veggies to chicken"
+          "path": "photos/cornstarch.png",
+          "name": "cornstarch"
         }
       }
     },
@@ -100,7 +100,11 @@
       "text": "Maggi seasoning",
       "step": {
         "title": "Add Maggi seasoning to the sauce mixture.",
-        "text": "Add Maggi seasoning to the sauce mixture."
+        "text": "Add Maggi seasoning to the sauce mixture.",
+        "image": {
+          "path": "photos/soya-sauce.png",
+          "name": "soya sauce"
+        }
       }
     },
     {
@@ -116,8 +120,8 @@
         "title": "Add vegetable oil to the sauce mixture.",
         "text": "Add vegetable oil to the sauce mixture.",
         "image": {
-          "path": "photos/add oil.png",
-          "name": "add oil"
+          "path": "photos/soya-sauce.png",
+          "name": "soya sauce"
         }
       }
     },
@@ -136,7 +140,11 @@
       "text": "Heavy whipping cream (qeshta), as needed",
       "step": {
         "title": "Add the heavy whipping cream (qeshta) and whisk until the sauce is smooth.",
-        "text": "Add the heavy whipping cream (qeshta) and whisk until the sauce is smooth."
+        "text": "Add the heavy whipping cream (qeshta) and whisk until the sauce is smooth.",
+        "image": {
+          "path": "photos/chicken-in-creamy-sauce.png",
+          "name": "chicken in creamy sauce"
+        }
       }
     },
     {
@@ -164,11 +172,11 @@
       "title": "Serve the creamy curry chicken and vegetables with the rice.",
       "text": "Serve the creamy curry chicken and vegetables with the rice.",
       "image": {
-        "path": "photos/wash rice.png",
-        "name": "wash rice"
+        "path": "photos/chicken-in-creamy-sauce.png",
+        "name": "chicken in creamy sauce"
       }
     }
   ],
   "notes": "Use cold water when mixing with flour to prevent lumps. The sauce can be prepared separately, but the family method is to add it directly to the chicken and vegetables and let everything cook together.",
-  "updatedAt": "2026-08-20T01:52:13.847Z"
+  "updatedAt": "2026-08-20T13:21:47.331Z"
 }
