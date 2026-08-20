@@ -17,7 +17,7 @@ Live: <https://family-recipe-box.onrender.com>
 
 When a recipe is saved, the server:
 
-1. Caps it at **12 steps**. Longer recipes are condensed by Groq (merging
+1. Caps it at **12 steps**. Longer recipes are condensed by the text model (merging
    closely related consecutive steps), falling back to a local merge if the
    model over-condenses.
 2. Splits the steps into **1-4 strips of about 3 steps each**:
