@@ -13,34 +13,61 @@ export function groqConfigured(){
   return Boolean(process.env.GROQ_API_KEY);
 }
 
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Groq's free tier is capped per minute, and one recipe can fire five calls
+// in a row, so 429s are routine rather than exceptional. Honour the retry
+// hint Groq sends back instead of failing the whole recipe.
+function retryDelayMs(status, headers, body, attempt){
+  if(status === 429){
+    const fromBody = /try again in ([\d.]+)s/i.exec(body || "");
+    if(fromBody) return Math.ceil(parseFloat(fromBody[1]) * 1000) + 400;
+    const header = headers?.get?.("retry-after");
+    if(header && Number.isFinite(Number(header))) return Number(header) * 1000 + 400;
+  }
+  return Math.min(8000, 700 * 2 ** attempt);
+}
+
 async function groqJson(messages, { maxTokens = 1400, temperature = 0.55 } = {}){
   const key = process.env.GROQ_API_KEY;
   if(!key) throw new Error("GROQ_API_KEY is not set");
 
-  const res = await fetch(GROQ_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      temperature,
-      max_completion_tokens: maxTokens,
-      response_format: { type: "json_object" },
-      messages
-    }),
-    signal: AbortSignal.timeout(Number(process.env.GROQ_TIMEOUT_MS || 60000))
-  });
+  const maxAttempts = Number(process.env.GROQ_MAX_ATTEMPTS || 5);
+  let lastError = "";
 
-  if(!res.ok){
+  for(let attempt = 0; attempt < maxAttempts; attempt++){
+    const res = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        temperature,
+        max_completion_tokens: maxTokens,
+        response_format: { type: "json_object" },
+        messages
+      }),
+      signal: AbortSignal.timeout(Number(process.env.GROQ_TIMEOUT_MS || 60000))
+    });
+
+    if(res.ok){
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content || "";
+      return parseJsonLoose(content);
+    }
+
     const detail = await res.text().catch(() => "");
-    throw new Error(`Groq ${res.status}: ${detail.slice(0, 300)}`);
+    lastError = `Groq ${res.status}: ${detail.slice(0, 300)}`;
+
+    // 4xx other than rate limiting will not improve on retry.
+    if(res.status !== 429 && res.status < 500) throw new Error(lastError);
+    if(attempt === maxAttempts - 1) break;
+    await sleep(retryDelayMs(res.status, res.headers, detail, attempt));
   }
 
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content || "";
-  return parseJsonLoose(content);
+  throw new Error(lastError || "Groq request failed");
 }
 
 // Models occasionally wrap JSON in prose or fences; recover the object.
@@ -67,15 +94,18 @@ export async function condenseSteps(steps, recipeTitle, limit = MAX_STEPS){
       {
         role: "system",
         content:
-          "You condense cooking instructions. Merge closely related consecutive steps " +
-          "so nothing is lost and the order never changes. Reply ONLY with JSON: " +
-          '{"steps":[{"title":"short imperative title","text":"the merged instruction"}]}'
+          "You condense cooking instructions. Merge only closely related consecutive " +
+          "steps, never reorder them, and never drop an instruction, timing, " +
+          "temperature or quantity. Keep as much detail as the step budget allows - " +
+          "condensing too far is worse than not condensing enough. Reply ONLY with " +
+          'JSON: {"steps":[{"title":"short imperative title","text":"the merged instruction"}]}'
       },
       {
         role: "user",
         content:
           `Recipe: ${recipeTitle}\n` +
-          `Condense these ${steps.length} steps into at most ${limit} steps.\n\n` +
+          `Condense these ${steps.length} steps into exactly ${limit} steps - ` +
+          `not fewer. Every original instruction must survive inside one of them.\n\n` +
           steps.map((step, i) => `${i + 1}. ${step.text}`).join("\n")
       }
     ], { temperature: 0.3 });
@@ -85,6 +115,11 @@ export async function condenseSteps(steps, recipeTitle, limit = MAX_STEPS){
       .filter(step => step.text)
       .slice(0, limit);
 
+    // Guard against over-merging, which loses detail and shrinks the comic.
+    const floor = Math.max(1, Math.ceil(limit * 0.75));
+    if(condensed.length < floor){
+      return { steps: condenseLocally(steps, limit), condensed: true, by: "local", error: `groq returned only ${condensed.length} steps` };
+    }
     if(condensed.length === 0) throw new Error("empty condense result");
     return { steps: condensed, condensed: true, by: "groq" };
   }catch(e){

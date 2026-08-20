@@ -89,7 +89,9 @@ app.post("/api/comics", async (req, res) => {
     const { steps, condensed, by } = await condenseSteps(submitted, recipeTitle, MAX_STEPS);
     const chunks = planChunks(steps);
 
-    const comics = await mapLimit(chunks, 2, async chunk => {
+    // Kept low so a burst of strips does not trip Groq's per-minute cap.
+    const concurrency = Number(process.env.COMIC_CONCURRENCY || 2);
+    const comics = await mapLimit(chunks, concurrency, async chunk => {
       const panels = await authorPanels({
         recipeTitle, category, ingredients, chunk, totalChunks: chunks.length
       });
