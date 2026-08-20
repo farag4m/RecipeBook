@@ -2,19 +2,21 @@
 // whichever renderer is configured; the SVG storyboard is the last resort
 // and never fails.
 
+import * as openrouter from "./openrouter.js";
 import * as gemini from "./gemini.js";
 import * as openai from "./openai.js";
 import * as pollinations from "./pollinations.js";
 import * as svg from "./svg.js";
 
-const PROVIDERS = { gemini, openai, pollinations, svg };
+const PROVIDERS = { openrouter, gemini, openai, pollinations, svg };
 // Pollinations is keyless but far too low-fidelity for the house style, so it
 // is opt-in only (IMAGE_PROVIDER=pollinations) and never chosen automatically.
-const AUTO_ORDER = ["gemini", "openai"];
+const AUTO_ORDER = ["openrouter", "gemini", "openai"];
 
 export function providerStatus(){
   return {
     configured: process.env.IMAGE_PROVIDER || "auto",
+    openrouter: openrouter.available(),
     gemini: gemini.available(),
     openai: openai.available(),
     pollinations: pollinations.available(),

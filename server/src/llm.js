@@ -1,23 +1,22 @@
-// Groq is the brain of the comic pipeline: it condenses oversized recipes
-// and writes the per-panel scene descriptions that the image model paints.
-// Groq has no text-to-image endpoint, so it never renders pixels itself.
+// The brain of the comic pipeline: condenses oversized recipes and writes the
+// per-panel scene descriptions an image model paints. Runs on OpenRouter, so
+// the text model can be swapped without touching this file.
 
 import { STYLE_POSITIVE, STYLE_NEGATIVE } from "./style.js";
 import { MAX_STEPS, condenseLocally } from "./chunk.js";
 
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-export const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+export const LLM_MODEL = process.env.OPENROUTER_TEXT_MODEL || "google/gemini-2.5-flash";
 
-export function groqConfigured(){
-  return Boolean(process.env.GROQ_API_KEY);
+export function llmConfigured(){
+  return Boolean(process.env.OPENROUTER_API_KEY);
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// Groq's free tier is capped per minute, and one recipe can fire five calls
-// in a row, so 429s are routine rather than exceptional. Honour the retry
-// hint Groq sends back instead of failing the whole recipe.
+// OpenRouter rate-limits and, on a low balance, rejects requests whose
+// max_tokens it cannot cover - so max_tokens is always sent explicitly.
 function retryDelayMs(status, headers, body, attempt){
   if(status === 429){
     const fromBody = /try again in ([\d.]+)s/i.exec(body || "");
@@ -28,38 +27,41 @@ function retryDelayMs(status, headers, body, attempt){
   return Math.min(8000, 700 * 2 ** attempt);
 }
 
-async function groqJson(messages, { maxTokens = 1400, temperature = 0.55 } = {}){
-  const key = process.env.GROQ_API_KEY;
-  if(!key) throw new Error("GROQ_API_KEY is not set");
+export async function llmJson(messages, { maxTokens = 1400, temperature = 0.55 } = {}){
+  const key = process.env.OPENROUTER_API_KEY;
+  if(!key) throw new Error("OPENROUTER_API_KEY is not set");
 
-  const maxAttempts = Number(process.env.GROQ_MAX_ATTEMPTS || 5);
+  const maxAttempts = Number(process.env.LLM_MAX_ATTEMPTS || 5);
   let lastError = "";
 
   for(let attempt = 0; attempt < maxAttempts; attempt++){
-    const res = await fetch(GROQ_URL, {
+    const res = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.PUBLIC_URL || "https://family-recipe-box.onrender.com",
+        "X-Title": "The Family Recipe Box"
       },
       body: JSON.stringify({
-        model: GROQ_MODEL,
+        model: LLM_MODEL,
         temperature,
-        max_completion_tokens: maxTokens,
+        max_tokens: maxTokens,
         response_format: { type: "json_object" },
         messages
       }),
-      signal: AbortSignal.timeout(Number(process.env.GROQ_TIMEOUT_MS || 60000))
+      signal: AbortSignal.timeout(Number(process.env.LLM_TIMEOUT_MS || 90000))
     });
 
     if(res.ok){
       const data = await res.json();
+      if(data.error) throw new Error(`OpenRouter: ${JSON.stringify(data.error).slice(0, 300)}`);
       const content = data?.choices?.[0]?.message?.content || "";
       return parseJsonLoose(content);
     }
 
     const detail = await res.text().catch(() => "");
-    lastError = `Groq ${res.status}: ${detail.slice(0, 300)}`;
+    lastError = `OpenRouter ${res.status}: ${detail.slice(0, 300)}`;
 
     // 4xx other than rate limiting will not improve on retry.
     if(res.status !== 429 && res.status < 500) throw new Error(lastError);
@@ -67,7 +69,7 @@ async function groqJson(messages, { maxTokens = 1400, temperature = 0.55 } = {})
     await sleep(retryDelayMs(res.status, res.headers, detail, attempt));
   }
 
-  throw new Error(lastError || "Groq request failed");
+  throw new Error(lastError || "OpenRouter request failed");
 }
 
 // Models occasionally wrap JSON in prose or fences; recover the object.
@@ -77,20 +79,18 @@ export function parseJsonLoose(text){
   try{ return JSON.parse(unfenced); }catch(e){}
   const start = unfenced.indexOf("{");
   const end = unfenced.lastIndexOf("}");
-  if(start !== -1 && end > start){
-    return JSON.parse(unfenced.slice(start, end + 1));
-  }
-  throw new Error("Groq did not return usable JSON");
+  if(start !== -1 && end > start) return JSON.parse(unfenced.slice(start, end + 1));
+  throw new Error("The model did not return usable JSON");
 }
 
 // --- Step condensing -------------------------------------------------------
 
 export async function condenseSteps(steps, recipeTitle, limit = MAX_STEPS){
   if(steps.length <= limit) return { steps, condensed: false };
-  if(!groqConfigured()) return { steps: condenseLocally(steps, limit), condensed: true, by: "local" };
+  if(!llmConfigured()) return { steps: condenseLocally(steps, limit), condensed: true, by: "local" };
 
   try{
-    const result = await groqJson([
+    const result = await llmJson([
       {
         role: "system",
         content:
@@ -108,7 +108,7 @@ export async function condenseSteps(steps, recipeTitle, limit = MAX_STEPS){
           `not fewer. Every original instruction must survive inside one of them.\n\n` +
           steps.map((step, i) => `${i + 1}. ${step.text}`).join("\n")
       }
-    ], { temperature: 0.3 });
+    ], { temperature: 0.3, maxTokens: 2000 });
 
     const condensed = (result.steps || [])
       .map(step => ({ title: String(step.title || "").trim(), text: String(step.text || "").trim() }))
@@ -118,10 +118,10 @@ export async function condenseSteps(steps, recipeTitle, limit = MAX_STEPS){
     // Guard against over-merging, which loses detail and shrinks the comic.
     const floor = Math.max(1, Math.ceil(limit * 0.75));
     if(condensed.length < floor){
-      return { steps: condenseLocally(steps, limit), condensed: true, by: "local", error: `groq returned only ${condensed.length} steps` };
+      return { steps: condenseLocally(steps, limit), condensed: true, by: "local",
+               error: `model returned only ${condensed.length} steps` };
     }
-    if(condensed.length === 0) throw new Error("empty condense result");
-    return { steps: condensed, condensed: true, by: "groq" };
+    return { steps: condensed, condensed: true, by: "model" };
   }catch(e){
     return { steps: condenseLocally(steps, limit), condensed: true, by: "local", error: e.message };
   }
@@ -148,7 +148,7 @@ export async function authorPanels({ recipeTitle, category, ingredients, chunk, 
     .map((step, i) => `${i + 1}. ${step.title ? step.title + " - " : ""}${step.text}`)
     .join("\n");
 
-  const result = await groqJson([
+  const result = await llmJson([
     { role: "system", content: PANEL_SYSTEM },
     {
       role: "user",
@@ -160,7 +160,7 @@ export async function authorPanels({ recipeTitle, category, ingredients, chunk, 
         `${chunk.startStep + 1}-${chunk.endStep + 1}.\n\n` +
         `Write exactly ${chunk.steps.length} panel${chunk.steps.length === 1 ? "" : "s"} for:\n${stepLines}`
     }
-  ]);
+  ], { maxTokens: 1600 });
 
   const panels = (result.panels || [])
     .map((panel, i) => ({
@@ -173,7 +173,7 @@ export async function authorPanels({ recipeTitle, category, ingredients, chunk, 
     .filter(panel => panel.scene)
     .slice(0, chunk.steps.length);
 
-  if(panels.length === 0) throw new Error("Groq returned no usable panels");
+  if(panels.length === 0) throw new Error("The model returned no usable panels");
 
   // Backfill if the model returned fewer panels than steps.
   while(panels.length < chunk.steps.length){

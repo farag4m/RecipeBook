@@ -4,7 +4,7 @@
 // GitHub and never holds a write credential.
 //
 // Comic pipeline: cap the recipe at 12 steps -> split into 1-4 strips of ~3
-// steps -> Groq writes one style-locked panel description per step -> an
+// steps -> the LLM writes one style-locked panel description per step -> an
 // image provider paints each strip as a multi-panel comic page.
 
 import express from "express";
@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { MAX_STEPS, PANELS_PER_CHUNK, MAX_CHUNKS, normalizeSteps, planChunks } from "./src/chunk.js";
-import { condenseSteps, authorPanels, groqConfigured, GROQ_MODEL } from "./src/groq.js";
+import { condenseSteps, authorPanels, llmConfigured, LLM_MODEL } from "./src/llm.js";
 import { buildImagePrompt, seedFor, STYLE_NAME } from "./src/style.js";
 import { renderStrip, providerStatus } from "./src/image/index.js";
 import { normalizeRecipe, newId, slugify, CATEGORIES } from "./src/recipe.js";
@@ -53,7 +53,7 @@ app.get("/api/health", wrap(async (req, res) => {
     ok: true,
     service: "family-recipe-box",
     style: STYLE_NAME,
-    groq: { configured: groqConfigured(), model: GROQ_MODEL },
+    llm: { configured: llmConfigured(), model: LLM_MODEL },
     image: providerStatus(),
     database,
     limits: { maxSteps: MAX_STEPS, panelsPerChunk: PANELS_PER_CHUNK, maxChunks: MAX_CHUNKS },
@@ -63,7 +63,7 @@ app.get("/api/health", wrap(async (req, res) => {
 
 app.get("/api/config", (req, res) => {
   res.json({
-    comicsEnabled: groqConfigured(),
+    comicsEnabled: llmConfigured(),
     categories: CATEGORIES,
     maxSteps: MAX_STEPS,
     panelsPerChunk: PANELS_PER_CHUNK,
@@ -190,7 +190,7 @@ async function persistWithComics(recipe, wantComics){
 // Shared by create and update: normalise, store, optionally draw.
 async function saveRecipe({ body, existing, res }){
   const recipe = normalizeRecipe(body, existing);
-  const wantComics = body.generateComics !== false && groqConfigured();
+  const wantComics = body.generateComics !== false && llmConfigured();
   const { recipe: saved, plan } = await persistWithComics(recipe, wantComics);
   res.json({ ok: true, recipe: saved, plan });
 }
@@ -230,7 +230,7 @@ app.post("/api/import", wrap(async (req, res) => {
     : body.recipe ? [body.recipe]
     : [body];
 
-  const withComics = body.generateComics === true && groqConfigured();
+  const withComics = body.generateComics === true && llmConfigured();
   const saved = [];
   for(const raw of incoming.filter(Boolean)){
     const recipe = normalizeRecipe({ ...raw, id: raw.id || newId() });
@@ -244,7 +244,7 @@ app.post("/api/import", wrap(async (req, res) => {
 app.post("/api/recipes/:id/comics", wrap(async (req, res) => {
   const existing = await db.getRecipe(req.params.id);
   if(!existing) return res.status(404).json({ error: "Recipe not found" });
-  if(!groqConfigured()) return res.status(503).json({ error: "GROQ_API_KEY is not configured." });
+  if(!llmConfigured()) return res.status(503).json({ error: "OPENROUTER_API_KEY is not configured." });
 
   await db.deleteComicImages(req.params.id);
   const drawn = await drawComics(existing);
@@ -278,7 +278,7 @@ async function start(){
   }
   app.listen(port, "0.0.0.0", () => {
     console.log(`[recipe-box] listening on ${port}`);
-    console.log(`[recipe-box] groq=${groqConfigured() ? GROQ_MODEL : "off"} image=${providerStatus().active}`);
+    console.log(`[recipe-box] llm=${llmConfigured() ? LLM_MODEL : "off"} image=${providerStatus().active}`);
   });
 }
 

@@ -15,16 +15,13 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20.18.0"
-      # Groq writes the comic panel scripts. Set in the Render dashboard.
-      - key: GROQ_API_KEY
+      # OpenRouter runs both the panel scripts and the painting.
+      - key: OPENROUTER_API_KEY
         sync: false
-      # Groq has no image endpoint; this key paints the panels.
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: GROQ_MODEL
-        value: openai/gpt-oss-120b
-      - key: GEMINI_IMAGE_MODEL
-        value: gemini-3.1-flash-image
+      - key: OPENROUTER_TEXT_MODEL
+        value: google/gemini-2.5-flash
+      - key: OPENROUTER_IMAGE_MODEL
+        value: google/gemini-3.1-flash-image
       - key: IMAGE_PROVIDER
         value: auto
       # Recipes and comic art live here - free web services have no disk.

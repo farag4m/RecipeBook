@@ -753,7 +753,7 @@ function openServiceSettings(){
       status.innerHTML = `<div class="status-line">
         Service up.<br>
         Recipes stored: ${db.recipes ?? "?"} | comic images: ${db.images ?? "?"}<br>
-        Comics: ${health.groq?.configured ? escapeHtml(health.groq.model) + " + " + escapeHtml(health.image.active) : "not configured"}
+        Comics: ${health.llm?.configured ? escapeHtml(health.llm.model) + " + " + escapeHtml(health.image.active) : "not configured"}
       </div>`;
     }catch(e){
       status.innerHTML = `<div class="error-msg">Service unreachable: ${escapeHtml(e.message)}. A free service sleeps when idle - try again in a minute.</div>`;
