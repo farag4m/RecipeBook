@@ -1,0 +1,186 @@
+{
+  "format": "family-recipe-box.recipe.v1",
+  "id": "r1787184050274y9e9z",
+  "slug": "creamy-curry-chicken-with-vegetables-rice",
+  "title": "Creamy Curry Chicken with Vegetables & Rice",
+  "category": "Mains",
+  "servings": "4",
+  "contributor": "Family Recipe",
+  "author": "Family Recipe",
+  "ingredients": [
+    {
+      "text": "4 chicken breasts",
+      "step": {
+        "title": "Cut chicken",
+        "text": "Cut chicken breasts into cubes.",
+        "image": {
+          "path": "photos/cut chicken.png",
+          "name": "cut chicken"
+        }
+      }
+    },
+    {
+      "text": "1 tablespoon curry powder",
+      "step": {
+        "title": "Marinate chicken",
+        "text": "If possible, soak the chicken in curry powder and soy sauce for a while so it absorbs the flavor.",
+        "image": {
+          "path": "photos/marinate chicken.png",
+          "name": "marinate chicken"
+        }
+      }
+    },
+    {
+      "text": "Soy sauce, as needed",
+      "step": {
+        "title": "Marinate chicken",
+        "text": "Add soy sauce to the chicken along with the curry powder and mix well.",
+        "image": {
+          "path": "photos/marinate chicken.png",
+          "name": "marinate chicken"
+        }
+      }
+    },
+    {
+      "text": "1 onion, chopped",
+      "step": {
+        "title": "Sauté onions",
+        "text": "Quickly sauté the onions in a little vegetable oil until softened. There is no need to brown them.",
+        "image": {
+          "path": "photos/saute onions.png",
+          "name": "saute onions"
+        }
+      }
+    },
+    {
+      "text": "Salt and pepper, to taste",
+      "step": {
+        "title": "Season chicken",
+        "text": "Add the chicken to the onions and season with salt and pepper.",
+        "image": {
+          "path": "photos/season chicken.png",
+          "name": "season chicken"
+        }
+      }
+    },
+    {
+      "text": "Frozen carrots and peas",
+      "step": {
+        "title": "Add vegetables",
+        "text": "Once the chicken is fully cooked, add the washed frozen carrots and peas.",
+        "image": {
+          "path": "photos/add vegetables.png",
+          "name": "add vegetables"
+        }
+      }
+    },
+    {
+      "text": "1 can mini corn, drained",
+      "step": {
+        "title": "Add mini corn",
+        "text": "Add the canned mini corn and mix everything together.",
+        "image": {
+          "path": "photos/add mini corn.png",
+          "name": "add mini corn"
+        }
+      }
+    },
+    {
+      "text": "3 tablespoons flour",
+      "step": {
+        "title": "Prepare sauce",
+        "text": "In a separate small pot, add the flour, Maggi seasoning, vegetable oil, and cold water.",
+        "image": {
+          "path": "photos/prepare sauce.png",
+          "name": "prepare sauce"
+        }
+      }
+    },
+    {
+      "text": "Maggi seasoning",
+      "step": {
+        "title": "Prepare sauce",
+        "text": "Add Maggi seasoning to the sauce mixture.",
+        "image": {
+          "path": "photos/prepare sauce.png",
+          "name": "prepare sauce"
+        }
+      }
+    },
+    {
+      "text": "1 tablespoon Vegeta, optional",
+      "step": {
+        "title": "Season sauce",
+        "text": "Add Vegeta if desired.",
+        "image": {
+          "path": "photos/prepare sauce.png",
+          "name": "prepare sauce"
+        }
+      }
+    },
+    {
+      "text": "Vegetable oil",
+      "step": {
+        "title": "Prepare sauce",
+        "text": "Add vegetable oil to the sauce mixture.",
+        "image": {
+          "path": "photos/prepare sauce.png",
+          "name": "prepare sauce"
+        }
+      }
+    },
+    {
+      "text": "4–6 cups cold water",
+      "step": {
+        "title": "Add cold water",
+        "text": "Slowly add 4–6 cups of cold water while whisking continuously. Cold water is important to prevent the flour from forming lumps.",
+        "image": {
+          "path": "photos/add cold water.png",
+          "name": "add cold water"
+        }
+      }
+    },
+    {
+      "text": "Heavy whipping cream (qeshta), as needed",
+      "step": {
+        "title": "Add cream",
+        "text": "Add the heavy whipping cream (qeshta) and whisk until the sauce is smooth.",
+        "image": {
+          "path": "photos/add cream.png",
+          "name": "add cream"
+        }
+      }
+    },
+    {
+      "text": "Rice, as needed",
+      "step": {
+        "title": "Prepare rice",
+        "text": "Prepare the rice separately in another pot.",
+        "image": {
+          "path": "photos/prepare rice.png",
+          "name": "prepare rice"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "title": "Combine and cook",
+      "text": "Pour the creamy sauce directly into the pot with the chicken and vegetables. Mix everything together and let it cook until the sauce is well combined and everything is heated through.",
+      "image": {
+        "path": "photos/add chicken.png",
+        "name": "add chicken"
+      }
+    },
+    {
+      "title": "Serve",
+      "text": "Serve the creamy curry chicken and vegetables with the rice.",
+      "image": {
+        "path": "photos/wash rice.png",
+        "name": "wash rice"
+      }
+    }
+  ],
+  "notes": "Use cold water when mixing with flour to prevent lumps. The sauce can be prepared separately, but the family method is to add it directly to the chicken and vegetables and let everything cook together.",
+  "updatedAt": "2026-08-20T00:00:50.280Z"
+}
