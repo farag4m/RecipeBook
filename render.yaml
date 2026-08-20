@@ -1,0 +1,29 @@
+# Render Blueprint for The Family Recipe Box.
+# One free web service serves both the static recipe box and the Groq-backed
+# comic API, so the browser talks to a same-origin backend.
+services:
+  - type: web
+    name: family-recipe-box
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
+      # Groq writes the comic panel scripts. Set in the Render dashboard.
+      - key: GROQ_API_KEY
+        sync: false
+      # Groq has no image endpoint; this key paints the panels.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: GEMINI_IMAGE_MODEL
+        value: gemini-3.1-flash-image
+      - key: IMAGE_PROVIDER
+        value: auto

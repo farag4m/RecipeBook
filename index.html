@@ -87,17 +87,21 @@
   .step-title{font-family:'Bangers';font-size:23px;line-height:1.1;letter-spacing:.02em;color:var(--ink);}
   .step-caption{font-size:13.5px;line-height:1.45;color:var(--ink-soft);margin:0 0 12px 66px;}
   .step-card img{display:block;width:100%;border:3px solid var(--ink);border-radius:12px;background:#fff;}
-  .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;}
-  .photo-card{background:var(--paper-raised);border:3px solid var(--ink);border-radius:10px;box-shadow:var(--shadow-sm);padding:10px;min-height:170px;}
-  .photo-card img{width:100%;aspect-ratio:1/1;object-fit:contain;background:var(--paper);border:2px solid var(--ink);border-radius:8px;display:block;}
-  .photo-card .photo-name{font-size:12px;color:var(--ink-soft);margin-top:8px;word-break:break-word;}
-  .photo-tools{grid-column:1/-1;background:#FFF0B8;border:3px dashed var(--ink);border-radius:10px;padding:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-  .choice-block{background:var(--paper);border:2.5px solid var(--ink);border-radius:10px;padding:12px;margin:12px 0;}
-  .choice-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:10px;}
-  .choice-option{border:2.5px solid var(--ink);border-radius:9px;background:#fff;padding:8px;cursor:pointer;box-shadow:2px 2px 0 var(--ink);}
-  .choice-option.selected{background:var(--butter);}
-  .choice-option img{width:100%;aspect-ratio:1/1;object-fit:contain;border:2px solid var(--ink);border-radius:6px;background:var(--paper);}
-  .choice-option span{display:block;font-size:11px;margin-top:6px;color:var(--ink-soft);word-break:break-word;}
+  .comic-strip{background:var(--paper-raised);border:3px solid var(--ink);border-radius:14px;box-shadow:var(--shadow-sm);padding:12px;margin-bottom:16px;}
+  .comic-strip-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .comic-badge{font-family:'Bangers';font-size:14px;letter-spacing:.03em;background:var(--butter);border:2.5px solid var(--ink);border-radius:20px;padding:2px 12px;box-shadow:2px 2px 0 var(--ink);}
+  .comic-strip img{display:block;width:100%;border:3px solid var(--ink);border-radius:10px;background:#fff;}
+  .comic-captions{display:grid;gap:8px;margin-top:12px;}
+  .comic-caption{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;line-height:1.45;color:var(--ink);}
+  .comic-caption .step-num{margin-top:1px;}
+  .comic-caption b{font-family:'Bangers';font-weight:400;font-size:15px;letter-spacing:.02em;display:block;}
+  .comic-caption span.txt{color:var(--ink-soft);}
+  .gen-steps{display:grid;gap:6px;margin-top:10px;}
+  .gen-step{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);font-family:'Comic Neue';letter-spacing:0;text-transform:none;}
+  .gen-step .dot{width:11px;height:11px;border-radius:50%;border:2px solid var(--ink);background:var(--paper);flex-shrink:0;}
+  .gen-step.done .dot{background:var(--pop);}
+  .gen-step.active .dot{background:var(--butter);}
+  .gen-step.failed .dot{background:var(--rule-red);}
   .modal .notes{color:var(--ink);font-size:13.5px;line-height:1.5;background:#FFF0B8;border:2px dashed var(--ink);padding:10px 12px;border-radius:8px;margin-top:14px;}
   .modal .footer-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:20px;font-size:12.5px;color:var(--ink-soft);}
   .modal-actions{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;}
@@ -165,8 +169,23 @@ const DATA_BRANCH = "data";
 const POLL_MS = 15000;
 const TOKEN_KEY = "family-recipe-box:github-token";
 const USER_KEY = "family-recipe-box:github-user";
+const COMIC_API_KEY = "family-recipe-box:comic-api";
+const COMIC_DIR = "comics";
+
+// The comic service runs on Render. When the site is served by that same
+// service the origin is already correct, so only a GitHub Pages visit needs
+// the absolute URL. Override per-browser from the Comic Service settings.
+const DEFAULT_COMIC_API = "https://family-recipe-box.onrender.com";
+function comicApiBase(){
+  const stored = (localStorage.getItem(COMIC_API_KEY) || "").trim();
+  if(stored) return stored.replace(/\/+$/, "");
+  if(location.protocol === "http:" || location.protocol === "https:"){
+    if(!/github\.io$/i.test(location.hostname)) return location.origin;
+  }
+  return DEFAULT_COMIC_API;
+}
+
 let recipes = [];
-let photos = [];
 let activeCat = "All";
 let searchTerm = "";
 let lastError = "";
@@ -211,55 +230,55 @@ function stepTitle(item){
   return String(item.title || item.name || item.text || item.instruction || item.description || "").trim();
 }
 
-function normalizePhotoRef(photo){
-  if(!photo) return null;
-  if(typeof photo === "string"){
-    const path = photo.trim();
-    if(!path) return null;
-    const file = path.split("/").pop();
-    return {path, name:file.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ")};
-  }
-  if(typeof photo !== "object") return null;
-  const path = String(photo.path || photo.src || photo.url || "").trim();
+// A comic strip covers a run of consecutive steps and carries one panel
+// caption per step it illustrates.
+function normalizeComicRef(comic, idx){
+  if(!comic || typeof comic !== "object") return null;
+  const path = String(comic.path || comic.src || comic.url || "").trim();
   if(!path) return null;
-  const file = path.split("/").pop();
+  const range = Array.isArray(comic.stepRange) ? comic.stepRange.map(Number) : [];
+  const panels = (Array.isArray(comic.panels) ? comic.panels : [])
+    .map((panel, panelIdx) => ({
+      stepIndex:Number.isInteger(panel?.stepIndex) ? panel.stepIndex : panelIdx,
+      caption:String(panel?.caption || "").trim()
+    }))
+    .filter(panel => panel.caption);
   return {
     path,
-    name:String(photo.name || photo.alt || file.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ")).trim()
+    name:String(comic.name || `Comic ${idx + 1}`).trim(),
+    stepRange:range.length === 2 && range.every(Number.isFinite) ? range : null,
+    panels
   };
 }
 
-function stepPhoto(item, fallback){
-  if(item && typeof item === "object"){
-    return normalizePhotoRef(item.image || item.photo || item.picture || item.stepPhoto || item.photoPath || item.imagePath);
-  }
-  return normalizePhotoRef(fallback);
+function normalizeComics(raw){
+  return (Array.isArray(raw) ? raw : [])
+    .map(normalizeComicRef)
+    .filter(Boolean)
+    .map((comic, idx) => ({...comic, index:idx}));
 }
 
 function ingredientStepEntries(item){
   if(!item || typeof item !== "object") return [];
-  const fallbackPhoto = normalizePhotoRef(item.image || item.photo || item.picture);
   const source = item.step || item.steps;
   const rawSteps = Array.isArray(source) ? source : (source ? [source] : []);
-  return rawSteps.map(rawStep => ({rawStep, fallbackPhoto}));
+  return rawSteps.map(rawStep => ({rawStep}));
 }
 
-function recipeStepEntries(rawIngredients, rawSteps, rawStepPhotos){
+function recipeStepEntries(rawIngredients, rawSteps){
   const ingredientEntries = rawIngredients.flatMap(ingredientStepEntries);
-  const topLevelEntries = rawSteps.map((rawStep, idx) => ({rawStep, fallbackPhoto:rawStepPhotos[idx]}));
+  const topLevelEntries = rawSteps.map(rawStep => ({rawStep}));
   return [...ingredientEntries, ...topLevelEntries];
 }
 
 function normalizeRecipe(r){
   const rawIngredients = Array.isArray(r.ingredients) ? r.ingredients : [];
   const rawSteps = Array.isArray(r.steps) ? r.steps : [];
-  const rawStepPhotos = Array.isArray(r.stepPhotos) ? r.stepPhotos : [];
   const rawStepTitles = Array.isArray(r.stepTitles) ? r.stepTitles : [];
-  const entries = recipeStepEntries(rawIngredients, rawSteps, rawStepPhotos)
+  const entries = recipeStepEntries(rawIngredients, rawSteps)
     .map(entry => ({...entry, text:stepText(entry.rawStep)}))
     .filter(entry => entry.text);
   const stepTitles = entries.map((entry, idx) => String(rawStepTitles[idx] || stepTitle(entry.rawStep) || stepText(entry.rawStep)).trim());
-  const stepPhotos = entries.map(entry => stepPhoto(entry.rawStep, entry.fallbackPhoto));
   return {
     id:r.id || uid(),
     title:String(r.title || "Untitled Recipe").trim() || "Untitled Recipe",
@@ -273,7 +292,7 @@ function normalizeRecipe(r){
     slug:slugify(r.slug || r.title || "recipe"),
     author:String(r.author || r.contributor || "").trim(),
     updatedAt:r.updatedAt || "",
-    stepPhotos
+    comics:normalizeComics(r.comics)
   };
 }
 
@@ -293,7 +312,6 @@ function recipeForStorage(recipe){
     contributor:r.contributor,
     author:r.author || githubUser || r.contributor,
     ingredients:r.ingredients.map((text, idx) => {
-      const image = normalizePhotoRef(r.stepPhotos[idx]);
       const ingredient = {text};
       const stepTextValue = r.steps[idx];
       if(stepTextValue){
@@ -301,20 +319,22 @@ function recipeForStorage(recipe){
           title:r.stepTitles[idx] || stepTextValue,
           text:stepTextValue
         };
-        if(image) ingredient.step.image = image;
       }
       return ingredient;
     }),
     steps:r.steps.slice(r.ingredients.length).map((text, offset) => {
       const idx = r.ingredients.length + offset;
-      const image = normalizePhotoRef(r.stepPhotos[idx]);
-      const step = {
+      return {
         title:r.stepTitles[idx] || text,
         text
       };
-      if(image) step.image = image;
-      return step;
     }),
+    comics:r.comics.map(comic => ({
+      path:comic.path,
+      name:comic.name,
+      stepRange:comic.stepRange,
+      panels:comic.panels
+    })),
     notes:r.notes,
     updatedAt:new Date().toISOString()
   };
@@ -351,16 +371,6 @@ function rawUrl(path){
   return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${DATA_BRANCH}/${encodedPath}?v=${Date.now()}`;
 }
 
-function photoUrl(photo){
-  return rawUrl(photo.path);
-}
-
-function photoFromPath(path, sha){
-  const file = path.split("/").pop();
-  const name = file.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
-  return {path, sha, file, name, slug:slugify(name), tokens:tokenize(name)};
-}
-
 async function loadRecipes(silent = false){
   if(syncInFlight) return;
   syncInFlight = true;
@@ -368,10 +378,6 @@ async function loadRecipes(silent = false){
   try{
     const tree = await githubApi(`git/trees/${encodeURIComponent(DATA_BRANCH)}?recursive=1`, {}, Boolean(githubToken));
     const entries = tree.tree || [];
-    photos = entries
-      .filter(item => item.type === "blob" && /^photos\/[^/]+\.png$/i.test(item.path))
-      .map(item => photoFromPath(item.path, item.sha))
-      .sort((a,b) => a.name.localeCompare(b.name));
     const files = entries.filter(item =>
       item.type === "blob" &&
       /^users\/[^/]+\/recipes\/[^/]+\.json$/.test(item.path)
@@ -401,24 +407,13 @@ async function loadRecipes(silent = false){
   }
 }
 
-async function uploadPhotoFile(file){
-  if(!requireGithubWrite()) return false;
-  if(!/\.png$/i.test(file.name)){
-    throw new Error("Only .png files can be uploaded.");
-  }
-  const base = slugify(file.name.replace(/\.png$/i, ""));
-  const path = `photos/${base}.png`;
+// Generated strips arrive as base64 from the comic service and are committed
+// to the data branch so recipes keep working as plain static JSON + PNG.
+async function uploadComicImage(path, base64Png, message){
   const sha = await getFileSha(path);
-  const dataUrl = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-  const content = String(dataUrl).split(",")[1];
   const body = {
-    message:`Upload photo: ${file.name}`,
-    content,
+    message,
+    content:base64Png,
     branch:DATA_BRANCH
   };
   if(sha) body.sha = sha;
@@ -427,8 +422,7 @@ async function uploadPhotoFile(file){
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify(body)
   }, true);
-  await loadRecipes(true);
-  return true;
+  return path;
 }
 
 function startSyncTimer(){
@@ -558,147 +552,107 @@ function githubPermissionHint(message){
   return message || "GitHub error";
 }
 
-const STOP_WORDS = new Set([
-  "a","an","and","the","to","of","in","into","with","for","on","at","by","it","this","that",
-  "add","put","place","use","using","until","then","about","over","under","your","you",
-  "cup","cups","tbsp","tsp","teaspoon","tablespoon","tablespoons","ounces","ounce","oz",
-  "lb","lbs","pound","pounds","gram","grams","g","kg","ml","l","inch","small","large",
-  "medium","thinly","finely","roughly","optional"
-]);
+// --- Comic generation ------------------------------------------------------
+// Steps are sent to the Groq-backed comic service, which caps the recipe at
+// 12 steps, splits it into 1-4 strips of about 3 steps, and paints one comic
+// page per strip. The returned images are committed to the data branch.
 
-function singularizeWord(word){
-  if(word.length > 4 && word.endsWith("ies")) return word.slice(0, -3) + "y";
-  if(word.length > 3 && word.endsWith("es")) return word.slice(0, -2);
-  if(word.length > 3 && word.endsWith("s")) return word.slice(0, -1);
-  return word;
+const COMIC_TIMEOUT_MS = 300000;
+
+function comicPathFor(recipe, index){
+  return `${COMIC_DIR}/${slugify(recipe.slug || recipe.title)}/strip-${index + 1}.png`;
 }
 
-function tokenize(text){
-  return String(text || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .split(/\s+/)
-    .map(singularizeWord)
-    .filter(token => token.length > 1 && !STOP_WORDS.has(token));
-}
-
-function stepSearchText(step, recipe){
-  const stepTokens = new Set(tokenize(step));
-  const ingredientHits = (recipe.ingredients || []).filter(ingredient =>
-    tokenize(ingredient).some(token => stepTokens.has(token))
-  );
-  return [step, ...ingredientHits].join(" ");
-}
-
-function photoScore(searchText, photo){
-  const query = tokenize(searchText);
-  if(query.length === 0) return 0;
-  const photoTokens = photo.tokens || tokenize(photo.name);
-  let score = 0;
-  for(const token of query){
-    if(photoTokens.includes(token)) score += 3;
-    else if(photoTokens.some(p => p.includes(token) || token.includes(p))) score += 1;
-  }
-  return score;
-}
-
-function rankedPhotoMatches(step, recipe){
-  const search = stepSearchText(step, recipe);
-  return photos
-    .map(photo => ({photo, score:photoScore(search, photo)}))
-    .filter(match => match.score > 0)
-    .sort((a,b) => b.score - a.score || a.photo.name.localeCompare(b.photo.name));
-}
-
-function autoAssignStepPhotos(recipe){
-  const stepPhotos = (recipe.stepPhotos || []).map(normalizePhotoRef);
-  const ambiguous = [];
-  recipe.steps.forEach((step, idx) => {
-    if(stepPhotos[idx]) return;
-    const matches = rankedPhotoMatches(step, recipe);
-    if(matches.length === 0){
-      stepPhotos[idx] = null;
-      return;
-    }
-    const topScore = matches[0].score;
-    const topMatches = matches.filter(match => match.score === topScore);
-    if(topMatches.length === 1){
-      stepPhotos[idx] = topMatches[0].photo;
-    }else{
-      stepPhotos[idx] = topMatches[0].photo;
-      ambiguous.push({idx, step, matches:topMatches.map(match => match.photo)});
-    }
-  });
-  return {stepPhotos, ambiguous};
-}
-
-function chooseAmbiguousStepPhotos(recipe, assigned, ambiguous){
-  if(ambiguous.length === 0) return Promise.resolve(assigned);
-  return new Promise(resolve => {
-    const overlay = document.createElement("div");
-    overlay.className = "overlay";
-    const blocks = ambiguous.map(group => `
-      <div class="choice-block" data-step="${group.idx}">
-        <div class="field-label">Step ${group.idx + 1}</div>
-        <div>${escapeHtml(group.step)}</div>
-        <div class="choice-options">
-          ${group.matches.map((photo, photoIdx) => `
-            <div class="choice-option ${photoIdx === 0 ? "selected" : ""}" data-path="${escapeHtml(photo.path)}">
-              <img src="${escapeHtml(photoUrl(photo))}" alt="${escapeHtml(photo.name)}">
-              <span>${escapeHtml(photo.name)}</span>
-            </div>
-          `).join("")}
-          <div class="choice-option" data-path="">
-            <span>No photo</span>
-          </div>
-        </div>
-      </div>
-    `).join("");
-    overlay.innerHTML = `
-      <div class="modal wide">
-        <button class="modal-close">&times;</button>
-        <h2>Choose Step Photos</h2>
-        <div class="rule"></div>
-        <div class="hint">More than one photo matched these steps.</div>
-        ${blocks}
-        <div class="modal-actions">
-          <button class="btn-primary" id="photoChoiceSave">Use Selected Photos</button>
-          <button class="btn-ghost" id="photoChoiceCancel">Cancel Save</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    overlay.querySelectorAll(".choice-option").forEach(option => {
-      option.onclick = () => {
-        const parent = option.closest(".choice-options");
-        parent.querySelectorAll(".choice-option").forEach(item => item.classList.remove("selected"));
-        option.classList.add("selected");
-      };
-    });
-    overlay.querySelector(".modal-close").onclick = () => { overlay.remove(); resolve(null); };
-    overlay.querySelector("#photoChoiceCancel").onclick = () => { overlay.remove(); resolve(null); };
-    overlay.querySelector("#photoChoiceSave").onclick = () => {
-      ambiguous.forEach(group => {
-        const selected = overlay.querySelector(`.choice-block[data-step="${group.idx}"] .choice-option.selected`);
-        const path = selected ? selected.dataset.path : "";
-        assigned[group.idx] = path ? photos.find(photo => photo.path === path) || null : null;
-      });
-      overlay.remove();
-      resolve(assigned);
+// The service may return PNG, JPEG or an SVG storyboard; GitHub-hosted images
+// are always stored as PNG so raw.githubusercontent serves them inline.
+function toPngBase64(mime, base64){
+  return new Promise((resolve, reject) => {
+    if(/png/i.test(mime)) return resolve(base64);
+    const img = new Image();
+    img.onload = () => {
+      try{
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth || img.width || 1440;
+        canvas.height = img.naturalHeight || img.height || 576;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#F6EDDA";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/png").split(",")[1]);
+      }catch(e){ reject(e); }
     };
+    img.onerror = () => reject(new Error("Could not read the generated image"));
+    img.src = `data:${mime};base64,${base64}`;
   });
 }
 
-async function resolveRecipeStepPhotos(recipe){
-  if(photos.length === 0){
-    recipe.stepPhotos = [];
-    return recipe;
+async function comicServiceHealth(){
+  const res = await fetch(`${comicApiBase()}/api/health`, {cache:"no-store"});
+  if(!res.ok) throw new Error(`Comic service ${res.status}`);
+  return res.json();
+}
+
+async function requestComics(recipe){
+  const res = await fetch(`${comicApiBase()}/api/comics`, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      title:recipe.title,
+      category:recipe.category,
+      servings:recipe.servings,
+      ingredients:recipe.ingredients,
+      steps:recipe.steps.map((text, idx) => ({
+        title:(recipe.stepTitles && recipe.stepTitles[idx]) || "",
+        text
+      }))
+    }),
+    signal:AbortSignal.timeout(COMIC_TIMEOUT_MS)
+  });
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok || !data.ok) throw new Error(data.error || `Comic service ${res.status}`);
+  return data;
+}
+
+// Generates strips, commits the PNGs, and returns the recipe with comic refs.
+// A failure here never blocks the save - the recipe is stored without comics.
+async function generateRecipeComics(recipe, report = () => {}){
+  if(recipe.steps.length === 0) return {...recipe, comics:[]};
+
+  report("Asking the comic service for a storyboard...");
+  const result = await requestComics(recipe);
+
+  const plan = result.plan || {};
+  report(
+    `Drawing ${plan.chunkCount} comic${plan.chunkCount === 1 ? "" : "s"} ` +
+    `from ${plan.usedSteps} step${plan.usedSteps === 1 ? "" : "s"}` +
+    (plan.condensed ? ` (condensed from ${plan.submittedSteps})` : "") + "..."
+  );
+
+  const comics = [];
+  for(const comic of result.comics){
+    report(`Saving comic ${comic.index + 1} of ${result.comics.length}...`);
+    const png = await toPngBase64(comic.image.mime, comic.image.base64);
+    const path = comicPathFor(recipe, comic.index);
+    await uploadComicImage(path, png, `Comic ${comic.index + 1} for ${recipe.title}`);
+    comics.push({
+      path,
+      name:`${recipe.title} - part ${comic.index + 1}`,
+      stepRange:comic.stepRange,
+      panels:comic.panels.map(panel => ({stepIndex:panel.stepIndex, caption:panel.caption}))
+    });
   }
-  const {stepPhotos, ambiguous} = autoAssignStepPhotos(recipe);
-  const chosen = await chooseAmbiguousStepPhotos(recipe, stepPhotos, ambiguous);
-  if(!chosen) return null;
-  recipe.stepPhotos = chosen.map(photo => photo ? {path:photo.path, name:photo.name} : null);
-  return recipe;
+
+  // The service may have condensed an oversized recipe; keep what it drew.
+  const steps = Array.isArray(result.steps) && result.steps.length
+    ? result.steps
+    : recipe.steps.map(text => ({title:"", text}));
+
+  return {
+    ...recipe,
+    steps:steps.map(step => step.text),
+    stepTitles:steps.map((step, idx) => step.title || recipe.stepTitles[idx] || step.text),
+    comics:normalizeComics(comics)
+  };
 }
 
 const ING_ICONS = [
@@ -724,17 +678,10 @@ function guessStepIcon(text){
 }
 
 function render(){
-  if(activeCat === "__photos"){
-    renderPhotoLibrary();
-    return;
-  }
   const counts = {};
   CATEGORIES.forEach(c => counts[c] = 0);
   recipes.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1; });
-  tabsEl.innerHTML = ["All", "__photos", ...CATEGORIES].map(c => {
-    if(c === "__photos"){
-      return `<div class="tab ${activeCat === c ? "active" : ""}" data-cat="${c}"><span class="tab-icon">📷</span> <span class="count">${photos.length}</span></div>`;
-    }
+  tabsEl.innerHTML = ["All", ...CATEGORIES].map(c => {
     const n = c === "All" ? recipes.length : (counts[c] || 0);
     const icon = c === "All" ? "🍽️" : CAT_ICON[c];
     return `<div class="tab ${activeCat === c ? "active" : ""}" data-cat="${c}"><span class="tab-icon">${icon}</span> <span class="count">${n}</span></div>`;
@@ -766,57 +713,6 @@ function render(){
   grid.querySelectorAll(".card").forEach(c => c.onclick = () => openView(c.dataset.id));
 }
 
-function renderPhotoLibrary(){
-  tabsEl.innerHTML = ["All", "__photos", ...CATEGORIES].map(c => {
-    if(c === "__photos"){
-      return `<div class="tab active" data-cat="${c}"><span class="tab-icon">📷</span> <span class="count">${photos.length}</span></div>`;
-    }
-    const n = c === "All" ? recipes.length : recipes.filter(r => r.category === c).length;
-    const icon = c === "All" ? "🍽️" : CAT_ICON[c];
-    return `<div class="tab" data-cat="${c}"><span class="tab-icon">${icon}</span> <span class="count">${n}</span></div>`;
-  }).join("");
-  tabsEl.querySelectorAll(".tab").forEach(t => t.onclick = () => { activeCat = t.dataset.cat; render(); });
-  subcount.innerHTML = `${photos.length} photo${photos.length === 1 ? "" : "s"} in GitHub <span class="sync-pill">${lastSyncAt ? "synced " + lastSyncAt.toLocaleTimeString() : "syncing"}</span>`;
-  const q = searchTerm.trim().toLowerCase();
-  const filtered = q ? photos.filter(photo => photo.name.toLowerCase().includes(q)) : photos;
-  grid.innerHTML = `
-    <div class="photo-tools">
-      <input type="file" id="photoUploadInput" accept="image/png" multiple>
-      <button class="btn-primary" id="photoUploadBtn">Upload PNG</button>
-      <span class="hint">Filenames are used for matching. Example: "cutting onions.png" matches onion cutting steps.</span>
-      <div id="photoUploadStatus"></div>
-    </div>
-    ${filtered.length ? filtered.map(photo => `
-      <div class="photo-card">
-        <img src="${escapeHtml(photoUrl(photo))}" alt="${escapeHtml(photo.name)}">
-        <div class="photo-name">${escapeHtml(photo.name)}</div>
-      </div>
-    `).join("") : `<div class="empty"><b>No photos yet</b>Upload PNG step photos to start matching recipes.</div>`}
-  `;
-  const uploadBtn = document.getElementById("photoUploadBtn");
-  const input = document.getElementById("photoUploadInput");
-  const status = document.getElementById("photoUploadStatus");
-  uploadBtn.onclick = async () => {
-    if(!requireGithubWrite()) return;
-    const files = Array.from(input.files || []);
-    if(files.length === 0){
-      status.innerHTML = `<div class="error-msg">Choose one or more PNG files.</div>`;
-      return;
-    }
-    uploadBtn.disabled = true;
-    status.innerHTML = `<div class="status-line">Uploading ${files.length} photo${files.length === 1 ? "" : "s"}...</div>`;
-    try{
-      for(const file of files) await uploadPhotoFile(file);
-      showToast(`Uploaded ${files.length} photo${files.length === 1 ? "" : "s"}`);
-      activeCat = "__photos";
-      renderPhotoLibrary();
-    }catch(e){
-      uploadBtn.disabled = false;
-      status.innerHTML = `<div class="error-msg">Upload failed: ${escapeHtml(githubPermissionHint(e.message))}</div>`;
-    }
-  };
-}
-
 function showToast(msg){
   const t = document.createElement("div");
   t.className = "toast";
@@ -845,31 +741,28 @@ function recipeFormatExample(){
         text:"1 cup brown or green lentils",
         step:{
           title:"Rinse lentils",
-          text:"Rinse lentils, then boil for 15 minutes until just tender.",
-          image:{path:"photos/rinse lentiles.png", name:"rinse lentiles"}
+          text:"Rinse lentils, then boil for 15 minutes until just tender."
         }
       },
       {
         text:"1 cup basmati rice",
         step:{
           title:"Wash rice",
-          text:"Rinse rice until the water runs clear.",
-          image:{path:"photos/wash rice.png", name:"wash rice"}
+          text:"Rinse rice until the water runs clear."
         }
       },
       {
         text:"3 large onions, thinly sliced",
         step:{
           title:"Saute onions",
-          text:"Cook onions in olive oil until deep golden brown.",
-          image:{path:"photos/saute onions.png", name:"saute onions"}
+          text:"Cook onions in olive oil until deep golden brown."
         }
       }
     ],
     steps:[
       {title:"Serve", text:"Fluff everything together and serve warm."}
     ],
-    notes:"Ingredient steps display in ingredient order. Use existing photo paths from the Photos tab, or omit image to let the app match one."
+    notes:"Ingredient steps display in ingredient order. Comic strips are drawn from the steps on save - leave comics out of the JSON."
   };
 }
 
@@ -931,24 +824,67 @@ async function shareRecipe(recipe){
   showToast("Share link copied");
 }
 
+function plainStepRow(recipe, idx){
+  const step = recipe.steps[idx];
+  if(!step) return "";
+  return `<div class="step-row"><span class="step-num">${idx + 1}</span><span class="step-emoji">${guessStepIcon(step)}</span><span>${escapeHtml(step)}</span></div>`;
+}
+
+// Comics cover consecutive runs of steps. Each strip is drawn with its panel
+// captions underneath; any step no comic covers falls back to a plain row.
 function renderStepDisplay(recipe){
-  return recipe.steps.map((step, idx) => {
-    const photo = recipe.stepPhotos && recipe.stepPhotos[idx];
-    const title = (recipe.stepTitles && recipe.stepTitles[idx]) || step;
-    if(photo && photo.path){
-      return `
-        <div class="step-card">
-          <div class="step-header">
-            <div class="step-number-big">${idx + 1}</div>
-            <div class="step-title">${escapeHtml(title)}</div>
-          </div>
-          ${title !== step ? `<div class="step-caption">${escapeHtml(step)}</div>` : ""}
-          <img src="${escapeHtml(rawUrl(photo.path))}" alt="${escapeHtml(photo.name || "Step " + (idx + 1))}">
-        </div>
-      `;
+  const comics = (recipe.comics || []).filter(comic => comic.stepRange);
+  if(comics.length === 0){
+    return recipe.steps.map((step, idx) => plainStepRow(recipe, idx)).join("");
+  }
+
+  const covered = new Set();
+  const ordered = [...comics].sort((a, b) => a.stepRange[0] - b.stepRange[0]);
+  const blocks = [];
+  let cursor = 0;
+
+  for(const comic of ordered){
+    const from = Math.max(1, comic.stepRange[0]) - 1;
+    const to = Math.min(recipe.steps.length, comic.stepRange[1]) - 1;
+
+    // Any steps before this strip that nothing illustrates.
+    for(let idx = cursor; idx < from; idx++){
+      if(!covered.has(idx)){ blocks.push(plainStepRow(recipe, idx)); covered.add(idx); }
     }
-    return `<div class="step-row"><span class="step-num">${idx + 1}</span><span class="step-emoji">${guessStepIcon(step)}</span><span>${escapeHtml(step)}</span></div>`;
-  }).join("");
+
+    const captions = [];
+    for(let idx = from; idx <= to; idx++){
+      if(idx < 0 || idx >= recipe.steps.length) continue;
+      covered.add(idx);
+      const panel = comic.panels.find(p => p.stepIndex === idx);
+      const title = panel?.caption || (recipe.stepTitles && recipe.stepTitles[idx]) || "";
+      captions.push(`
+        <div class="comic-caption">
+          <span class="step-num">${idx + 1}</span>
+          <span>
+            ${title && title !== recipe.steps[idx] ? `<b>${escapeHtml(title)}</b>` : ""}
+            <span class="txt">${escapeHtml(recipe.steps[idx])}</span>
+          </span>
+        </div>`);
+    }
+
+    blocks.push(`
+      <div class="comic-strip">
+        <div class="comic-strip-head">
+          <span class="comic-badge">Part ${comic.index + 1}</span>
+          <span class="hint">Steps ${from + 1}${to > from ? "-" + (to + 1) : ""}</span>
+        </div>
+        <img src="${escapeHtml(rawUrl(comic.path))}" alt="${escapeHtml(comic.name)}" loading="lazy">
+        <div class="comic-captions">${captions.join("")}</div>
+      </div>`);
+
+    cursor = to + 1;
+  }
+
+  for(let idx = cursor; idx < recipe.steps.length; idx++){
+    if(!covered.has(idx)) blocks.push(plainStepRow(recipe, idx));
+  }
+  return blocks.join("");
 }
 
 function openView(id){
@@ -1031,6 +967,13 @@ function openForm(existing, prefill){
       <textarea id="f-steps" rows="6">${escapeHtml((data.steps || []).join("\n"))}</textarea>
       <label>Notes <span class="hint">- optional</span></label>
       <textarea id="f-notes" rows="2">${escapeHtml(data.notes || "")}</textarea>
+      <div class="tool-box" style="margin-top:16px;">
+        <div class="confirm-row">
+          <input type="checkbox" id="f-comics" checked style="width:auto;">
+          <label for="f-comics" style="margin:0;">Draw comic strips for the steps</label>
+        </div>
+        <div class="hint">Steps are capped at 12 and split into 1-4 strips of about 3 panels. Drawing takes up to a minute.</div>
+      </div>
       <div class="modal-actions">
         <button class="btn-primary" id="saveBtn">Save Recipe</button>
         <button class="btn-ghost" id="cancelBtn">Cancel</button>
@@ -1045,6 +988,7 @@ function openForm(existing, prefill){
     const titleField = overlay.querySelector("#f-title");
     const saveBtn = overlay.querySelector("#saveBtn");
     const statusEl = overlay.querySelector("#form-status");
+    const makeComics = overlay.querySelector("#f-comics");
     const title = titleField.value.trim();
     let titleErr = overlay.querySelector("#title-err");
     if(!title){
@@ -1067,21 +1011,29 @@ function openForm(existing, prefill){
       contributor:overlay.querySelector("#f-contributor").value.trim(),
       ingredients:overlay.querySelector("#f-ingredients").value.split("\n").map(s => s.trim()).filter(Boolean),
       steps:overlay.querySelector("#f-steps").value.split("\n").map(s => s.trim()).filter(Boolean),
-      notes:overlay.querySelector("#f-notes").value.trim()
+      notes:overlay.querySelector("#f-notes").value.trim(),
+      // Keep existing artwork when the author opts out of redrawing.
+      comics:existing ? existing.comics : []
     });
     try{
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving...";
-      statusEl.innerHTML = `<div class="status-line">Matching step photos...</div>`;
-      const resolved = await resolveRecipeStepPhotos(rec);
-      if(!resolved){
-        saveBtn.disabled = false;
-        saveBtn.textContent = "Save Recipe";
-        statusEl.innerHTML = `<div class="status-line">Save cancelled.</div>`;
-        return;
+
+      let toSave = rec;
+      if(makeComics.checked && rec.steps.length){
+        try{
+          toSave = await generateRecipeComics(rec, msg => {
+            statusEl.innerHTML = `<div class="status-line">${escapeHtml(msg)}</div>`;
+          });
+        }catch(e){
+          // Comics are a bonus, never a gate on saving the recipe.
+          statusEl.innerHTML = `<div class="error-msg">Comics failed (${escapeHtml(e.message)}). Saving the recipe without them...</div>`;
+          toSave = {...rec, comics:[]};
+        }
       }
+
       statusEl.innerHTML = `<div class="status-line">Saving to GitHub...</div>`;
-      const saved = await saveRecipeToGithub(resolved, existing);
+      const saved = await saveRecipeToGithub(toSave, existing);
       if(saved){
         overlay.remove();
         showToast(`Saved "${rec.title}"`);
@@ -1182,6 +1134,10 @@ function openImport(prefill = ""){
       <div class="tool-box">
         <label style="margin-top:0">Paste recipe JSON</label>
         <textarea id="import-input" rows="12" placeholder='Paste one recipe, {"recipe": ...}, or {"recipes": [...]} here. Imported recipes are committed to GitHub.'>${escapeHtml(prefill)}</textarea>
+        <div class="confirm-row" style="margin-top:12px;">
+          <input type="checkbox" id="import-comics" checked style="width:auto;">
+          <label for="import-comics" style="margin:0;">Draw comic strips for each imported recipe</label>
+        </div>
         <div class="modal-actions">
           <button class="btn-primary" id="import-run">Import to GitHub</button>
           <button class="btn-ghost" id="import-file">Choose File</button>
@@ -1212,16 +1168,21 @@ function openImport(prefill = ""){
       status.innerHTML = `<div class="status-line">Reading JSON...</div>`;
       const incoming = parseRecipeJson(input.value);
       const normalized = incoming.map(normalizeRecipe);
+      const withComics = overlay.querySelector("#import-comics").checked;
       for(const rec of normalized){
-        status.innerHTML = `<div class="status-line">Matching photos for ${escapeHtml(rec.title)}...</div>`;
-        const resolved = await resolveRecipeStepPhotos({...rec, id:uid()});
-        if(!resolved){
-          importBtn.disabled = false;
-          status.innerHTML = `<div class="status-line">Import cancelled.</div>`;
-          return;
+        let toSave = {...rec, id:uid()};
+        if(withComics && toSave.steps.length){
+          try{
+            toSave = await generateRecipeComics(toSave, msg => {
+              status.innerHTML = `<div class="status-line">${escapeHtml(rec.title)}: ${escapeHtml(msg)}</div>`;
+            });
+          }catch(e){
+            status.innerHTML = `<div class="error-msg">Comics failed for ${escapeHtml(rec.title)} (${escapeHtml(e.message)}). Importing without them...</div>`;
+            toSave = {...toSave, comics:[]};
+          }
         }
         status.innerHTML = `<div class="status-line">Saving ${escapeHtml(rec.title)}...</div>`;
-        await saveRecipeToGithub(resolved, null);
+        await saveRecipeToGithub(toSave, null);
       }
       overlay.remove();
       showToast(`Imported ${normalized.length} recipe${normalized.length === 1 ? "" : "s"}`);
@@ -1258,6 +1219,17 @@ function openGithubSettings(){
         </div>
         <div id="gh-status"></div>
       </div>
+      <div class="tool-box" style="margin-top:16px;">
+        <div class="field-label" style="margin-top:0;">Comic Service</div>
+        <label>Service URL</label>
+        <input type="text" id="comic-url" value="${escapeHtml(localStorage.getItem(COMIC_API_KEY) || "")}" placeholder="${escapeHtml(comicApiBase())}">
+        <div class="hint">Leave blank to use this site's own origin. The Groq API key lives on the server and is never sent to the browser.</div>
+        <div class="modal-actions">
+          <button class="btn-primary" id="comic-save">Save URL</button>
+          <button class="btn-ai" id="comic-test">Test Service</button>
+        </div>
+        <div id="comic-status"></div>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -1284,6 +1256,29 @@ function openGithubSettings(){
     showToast("GitHub access cleared");
     overlay.remove();
   };
+  const comicUrl = overlay.querySelector("#comic-url");
+  const comicStatus = overlay.querySelector("#comic-status");
+  overlay.querySelector("#comic-save").onclick = () => {
+    const value = comicUrl.value.trim().replace(/\/+$/, "");
+    if(value) localStorage.setItem(COMIC_API_KEY, value);
+    else localStorage.removeItem(COMIC_API_KEY);
+    showToast("Comic service URL saved");
+  };
+  overlay.querySelector("#comic-test").onclick = async () => {
+    const value = comicUrl.value.trim().replace(/\/+$/, "");
+    if(value) localStorage.setItem(COMIC_API_KEY, value);
+    else localStorage.removeItem(COMIC_API_KEY);
+    comicStatus.innerHTML = `<div class="status-line">Contacting ${escapeHtml(comicApiBase())}...</div>`;
+    try{
+      const health = await comicServiceHealth();
+      comicStatus.innerHTML = health.groq?.configured
+        ? `<div class="status-line">Service is up. Groq model ${escapeHtml(health.groq.model)}, artwork by ${escapeHtml(health.image.active)}. Up to ${health.limits.maxSteps} steps across ${health.limits.maxChunks} comics.</div>`
+        : `<div class="error-msg">Service is up but GROQ_API_KEY is not configured on it.</div>`;
+    }catch(e){
+      comicStatus.innerHTML = `<div class="error-msg">Comic service unreachable: ${escapeHtml(e.message)}. A free Render service sleeps when idle - try again in a minute.</div>`;
+    }
+  };
+
   overlay.querySelector("#gh-test").onclick = async () => {
     storeAccess();
     if(!githubUser || !githubToken){

@@ -1,0 +1,17 @@
+{
+  "name": "family-recipe-box-comics",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Groq-powered comic strip generator for The Family Recipe Box",
+  "type": "module",
+  "main": "index.js",
+  "engines": { "node": ">=20.0.0" },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "smoke": "node scripts/smoke.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
