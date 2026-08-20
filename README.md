@@ -22,22 +22,34 @@ When a recipe is saved, the server:
    model over-condenses.
 2. Splits the steps into **1-4 strips of about 3 steps each**:
    1-3 steps → 1 strip, 4-6 → 2, 7-9 → 3, 10-12 → 4.
-3. Has **Groq** write one comic panel description per step, locked to the
-   house art style (warm cream paper, watercolour over ink linework, hands
-   only, orange action marks, no text).
+3. Has the **text model** write one comic panel description per step, locked
+   to the house art style (warm cream paper, watercolour over ink linework,
+   hands only, orange action marks, no text).
 4. Paints each strip as a single multi-panel comic page.
 5. Stores the image in Postgres and serves it from `/api/images/:id`.
 
-### Groq does not generate images
+### One key, both halves
 
-GroqCloud serves text, audio and vision-understanding models only - it has no
-text-to-image endpoint. Groq is the *brain* (condensing, panel scripts,
-style-locked prompts) and a separate image model paints the pixels:
+Everything runs through **OpenRouter**: a text model writes the panel scripts
+and an image model on the same key paints them.
+
+| Setting | Default |
+| --- | --- |
+| `OPENROUTER_TEXT_MODEL` | `google/gemini-2.5-flash` |
+| `OPENROUTER_IMAGE_MODEL` | `google/gemini-3.1-flash-image` |
+
+Text and image generation are separate capabilities, and not every provider
+offers both - Groq, for instance, serves text, audio and vision-understanding
+models but has no text-to-image endpoint at all. OpenRouter is used here
+precisely because it fronts models for both.
+
+Fallback renderers, tried in order when OpenRouter is unset or failing:
 
 | Provider | Env var | Notes |
 | --- | --- | --- |
-| `gemini` | `GEMINI_API_KEY` | Default. Matches the existing hand-painted art. |
-| `openai` | `OPENAI_API_KEY` | Optional alternative. |
+| `openrouter` | `OPENROUTER_API_KEY` | Default. |
+| `gemini` | `GEMINI_API_KEY` | Direct to Google. |
+| `openai` | `OPENAI_API_KEY` | Direct to OpenAI. |
 | `pollinations` | none | Keyless, low fidelity, opt-in only. |
 | `svg` | none | Built-in storyboard fallback so saving never fails. |
 
@@ -60,7 +72,7 @@ persistent disk, so the filesystem cannot be used:
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/health` | Health check; reports Groq, image provider, and database status |
+| `GET /api/health` | Health check; reports model, image provider, and database status |
 | `GET /api/config` | Public limits and categories |
 | `GET /api/recipes` | List all recipes |
 | `GET /api/recipes/:id` | One recipe |
@@ -90,7 +102,7 @@ The repo ships a Blueprint (`render.yaml`): one free web service plus a free
 Postgres database.
 
 1. In Render, create a **Blueprint** from this repo.
-2. Set `GROQ_API_KEY` and `GEMINI_API_KEY` in the service environment.
+2. Set `OPENROUTER_API_KEY` in the service environment.
    `DATABASE_URL` is wired from the database automatically.
 
 Health checks hit `/api/health`. Free services sleep when idle, so the first
