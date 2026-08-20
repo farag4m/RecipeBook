@@ -65,6 +65,8 @@ the frontend and API share an origin.
 
 ## Deploying to Render
 
+Live: <https://family-recipe-box.onrender.com>
+
 The repo ships a Blueprint (`render.yaml`): one free web service that serves
 both the static site and the API.
 
