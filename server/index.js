@@ -165,30 +165,33 @@ app.get("/api/recipes/:id", wrap(async (req, res) => {
   res.json({ ok: true, recipe });
 }));
 
-// Shared by create and update: normalise, optionally draw, then store.
+// Stores the recipe, then optionally draws its art and stores it again.
+// The row has to exist first: comic_images references recipes(id).
+async function persistWithComics(recipe, wantComics){
+  let saved = await db.upsertRecipe(recipe);
+  if(!wantComics || !recipe.steps.length) return { recipe: saved, plan: null };
+
+  try{
+    const drawn = await drawComics(recipe);
+    if(!drawn.comics.length) return { recipe: saved, plan: drawn.plan };
+    // Condensing may have rewritten the step list; keep what was drawn.
+    recipe.steps = drawn.steps.map(step => step.text);
+    recipe.stepTitles = drawn.steps.map(step => step.title || step.text);
+    recipe.comics = drawn.comics;
+    saved = await db.upsertRecipe(recipe);
+    return { recipe: saved, plan: drawn.plan };
+  }catch(e){
+    // Art is a bonus, never a gate on saving the recipe.
+    console.error("[comics]", e.message);
+    return { recipe: saved, plan: { error: e.message } };
+  }
+}
+
+// Shared by create and update: normalise, store, optionally draw.
 async function saveRecipe({ body, existing, res }){
   const recipe = normalizeRecipe(body, existing);
   const wantComics = body.generateComics !== false && groqConfigured();
-  let plan = null;
-
-  if(wantComics && recipe.steps.length){
-    try{
-      const drawn = await drawComics(recipe);
-      if(drawn.comics.length){
-        // Condensing may have rewritten the step list; keep what was drawn.
-        recipe.steps = drawn.steps.map(step => step.text);
-        recipe.stepTitles = drawn.steps.map(step => step.title || step.text);
-        recipe.comics = drawn.comics;
-        plan = drawn.plan;
-      }
-    }catch(e){
-      // Art is a bonus, never a gate on saving the recipe.
-      console.error("[comics]", e.message);
-      plan = { error: e.message };
-    }
-  }
-
-  const saved = await db.upsertRecipe(recipe);
+  const { recipe: saved, plan } = await persistWithComics(recipe, wantComics);
   res.json({ ok: true, recipe: saved, plan });
 }
 
@@ -227,21 +230,12 @@ app.post("/api/import", wrap(async (req, res) => {
     : body.recipe ? [body.recipe]
     : [body];
 
-  const withComics = body.generateComics === true;
+  const withComics = body.generateComics === true && groqConfigured();
   const saved = [];
   for(const raw of incoming.filter(Boolean)){
     const recipe = normalizeRecipe({ ...raw, id: raw.id || newId() });
-    if(withComics && groqConfigured() && recipe.steps.length){
-      try{
-        const drawn = await drawComics(recipe);
-        if(drawn.comics.length){
-          recipe.steps = drawn.steps.map(step => step.text);
-          recipe.stepTitles = drawn.steps.map(step => step.title || step.text);
-          recipe.comics = drawn.comics;
-        }
-      }catch(e){ console.error("[import comics]", e.message); }
-    }
-    saved.push(await db.upsertRecipe(recipe));
+    const result = await persistWithComics(recipe, withComics);
+    saved.push(result.recipe);
   }
   res.json({ ok: true, imported: saved.length, recipes: saved });
 }));
