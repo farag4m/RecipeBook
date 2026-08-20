@@ -143,7 +143,7 @@
       <button class="btn-ghost" id="btnAddJson">Add JSON</button>
       <button class="btn-ghost" id="btnImport">Import</button>
       <button class="btn-ghost" id="btnSync">Sync</button>
-      <button class="btn-ghost" id="btnSettings">GitHub</button>
+      <button class="btn-ghost" id="btnSettings">Service</button>
       <button class="btn-primary" id="btnAdd">+ Add Recipe</button>
     </div>
   </div>
@@ -163,27 +163,21 @@
 <script>
 const CATEGORIES = ["Breakfast","Mains","Sides","Desserts","Drinks","Snacks","Other"];
 const CAT_ICON = {Breakfast:"🍳",Mains:"🍝",Sides:"🥗",Desserts:"🍰",Drinks:"🥤",Snacks:"🍿",Other:"⭐"};
-const GITHUB_OWNER = "farag4m";
-const GITHUB_REPO = "RecipeBook";
-const DATA_BRANCH = "data";
-const POLL_MS = 15000;
-const TOKEN_KEY = "family-recipe-box:github-token";
-const USER_KEY = "family-recipe-box:github-user";
-const COMIC_API_KEY = "family-recipe-box:comic-api";
-const COMIC_DIR = "comics";
+const API_KEY_STORE = "family-recipe-box:api";
+const POLL_MS = 30000;
 
-// The comic service runs on Render. When the site is served by that same
-// service the origin is already correct, so only a GitHub Pages visit needs
-// the absolute URL. Override per-browser from the Comic Service settings.
-const DEFAULT_COMIC_API = "https://family-recipe-box.onrender.com";
-function comicApiBase(){
-  const stored = (localStorage.getItem(COMIC_API_KEY) || "").trim();
+// Recipes live on the server. When the site is served by that server the
+// origin is already right; only a separate static host needs an override.
+const DEFAULT_API = "https://family-recipe-box.onrender.com";
+function apiBase(){
+  const stored = (localStorage.getItem(API_KEY_STORE) || "").trim();
   if(stored) return stored.replace(/\/+$/, "");
   if(location.protocol === "http:" || location.protocol === "https:"){
     if(!/github\.io$/i.test(location.hostname)) return location.origin;
   }
-  return DEFAULT_COMIC_API;
+  return DEFAULT_API;
 }
+function apiUrl(path){ return apiBase() + path; }
 
 let recipes = [];
 let activeCat = "All";
@@ -192,237 +186,50 @@ let lastError = "";
 let syncTimer = null;
 let syncInFlight = false;
 let lastSyncAt = null;
-let githubToken = sessionStorage.getItem(TOKEN_KEY) || "";
-let githubUser = sessionStorage.getItem(USER_KEY) || "";
 
 const grid = document.getElementById("grid");
 const tabsEl = document.getElementById("tabs");
 const subcount = document.getElementById("subcount");
 
-function uid(){ return "r" + Date.now() + Math.random().toString(36).slice(2,7); }
 function escapeHtml(s){ return String(s || "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
-function slugify(s){
-  return String(s || "recipe").toLowerCase().trim()
-    .replace(/['"]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 70) || "recipe";
-}
 
-function ingredientText(item){
-  if(typeof item === "string") return item.trim();
-  if(!item || typeof item !== "object") return "";
-  if(item.text) return String(item.text).trim();
-  const parts = [item.quantity, item.unit, item.name || item.ingredient].map(value => String(value || "").trim()).filter(Boolean);
-  const note = String(item.note || item.notes || "").trim();
-  return (parts.join(" ") + (note ? ` (${note})` : "")).trim();
-}
+// --- api -------------------------------------------------------------------
 
-function stepText(item){
-  if(typeof item === "string") return item.trim();
-  if(!item || typeof item !== "object") return "";
-  return String(item.text || item.instruction || item.description || item.title || "").trim();
-}
-
-function stepTitle(item){
-  if(typeof item === "string") return item.trim();
-  if(!item || typeof item !== "object") return "";
-  return String(item.title || item.name || item.text || item.instruction || item.description || "").trim();
-}
-
-// A comic strip covers a run of consecutive steps and carries one panel
-// caption per step it illustrates.
-function normalizeComicRef(comic, idx){
-  if(!comic || typeof comic !== "object") return null;
-  const path = String(comic.path || comic.src || comic.url || "").trim();
-  if(!path) return null;
-  const range = Array.isArray(comic.stepRange) ? comic.stepRange.map(Number) : [];
-  const panels = (Array.isArray(comic.panels) ? comic.panels : [])
-    .map((panel, panelIdx) => ({
-      stepIndex:Number.isInteger(panel?.stepIndex) ? panel.stepIndex : panelIdx,
-      caption:String(panel?.caption || "").trim()
-    }))
-    .filter(panel => panel.caption);
-  return {
-    path,
-    name:String(comic.name || `Comic ${idx + 1}`).trim(),
-    stepRange:range.length === 2 && range.every(Number.isFinite) ? range : null,
-    panels
-  };
-}
-
-function normalizeComics(raw){
-  return (Array.isArray(raw) ? raw : [])
-    .map(normalizeComicRef)
-    .filter(Boolean)
-    .map((comic, idx) => ({...comic, index:idx}));
-}
-
-function ingredientStepEntries(item){
-  if(!item || typeof item !== "object") return [];
-  const source = item.step || item.steps;
-  const rawSteps = Array.isArray(source) ? source : (source ? [source] : []);
-  return rawSteps.map(rawStep => ({rawStep}));
-}
-
-function recipeStepEntries(rawIngredients, rawSteps){
-  const ingredientEntries = rawIngredients.flatMap(ingredientStepEntries);
-  const topLevelEntries = rawSteps.map(rawStep => ({rawStep}));
-  return [...ingredientEntries, ...topLevelEntries];
-}
-
-function normalizeRecipe(r){
-  const rawIngredients = Array.isArray(r.ingredients) ? r.ingredients : [];
-  const rawSteps = Array.isArray(r.steps) ? r.steps : [];
-  const rawStepTitles = Array.isArray(r.stepTitles) ? r.stepTitles : [];
-  const entries = recipeStepEntries(rawIngredients, rawSteps)
-    .map(entry => ({...entry, text:stepText(entry.rawStep)}))
-    .filter(entry => entry.text);
-  const stepTitles = entries.map((entry, idx) => String(rawStepTitles[idx] || stepTitle(entry.rawStep) || stepText(entry.rawStep)).trim());
-  return {
-    id:r.id || uid(),
-    title:String(r.title || "Untitled Recipe").trim() || "Untitled Recipe",
-    category:CATEGORIES.includes(r.category) ? r.category : "Other",
-    servings:String(r.servings || "").trim(),
-    contributor:String(r.contributor || r.author || "").trim(),
-    ingredients:rawIngredients.map(ingredientText).filter(Boolean),
-    steps:entries.map(entry => entry.text),
-    stepTitles,
-    notes:String(r.notes || "").trim(),
-    slug:slugify(r.slug || r.title || "recipe"),
-    author:String(r.author || r.contributor || "").trim(),
-    updatedAt:r.updatedAt || "",
-    comics:normalizeComics(r.comics)
-  };
-}
-
-function withMeta(recipe, meta){
-  return Object.assign(normalizeRecipe(recipe), meta);
-}
-
-function recipeForStorage(recipe){
-  const r = normalizeRecipe(recipe);
-  return {
-    format:"family-recipe-box.recipe.v1",
-    id:r.id,
-    slug:r.slug,
-    title:r.title,
-    category:r.category,
-    servings:r.servings,
-    contributor:r.contributor,
-    author:r.author || githubUser || r.contributor,
-    ingredients:r.ingredients.map((text, idx) => {
-      const ingredient = {text};
-      const stepTextValue = r.steps[idx];
-      if(stepTextValue){
-        ingredient.step = {
-          title:r.stepTitles[idx] || stepTextValue,
-          text:stepTextValue
-        };
-      }
-      return ingredient;
-    }),
-    steps:r.steps.slice(r.ingredients.length).map((text, offset) => {
-      const idx = r.ingredients.length + offset;
-      return {
-        title:r.stepTitles[idx] || text,
-        text
-      };
-    }),
-    comics:r.comics.map(comic => ({
-      path:comic.path,
-      name:comic.name,
-      stepRange:comic.stepRange,
-      panels:comic.panels
-    })),
-    notes:r.notes,
-    updatedAt:new Date().toISOString()
-  };
-}
-
-function githubHeaders(auth){
-  const headers = {
-    "Accept":"application/vnd.github+json",
-    "X-GitHub-Api-Version":"2022-11-28"
-  };
-  if(auth && githubToken) headers.Authorization = `Bearer ${githubToken}`;
-  return headers;
-}
-
-async function githubApi(path, options = {}, auth = false){
-  const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/${path}`, {
+async function api(path, options = {}){
+  const res = await fetch(apiUrl(path), {
     cache:"no-store",
     ...options,
-    headers:{...githubHeaders(auth), ...(options.headers || {})}
+    headers:{"Content-Type":"application/json", ...(options.headers || {})}
   });
-  if(!res.ok){
-    const text = await res.text();
-    let message = `GitHub API ${res.status}`;
-    try{ message = JSON.parse(text).message || message; }catch(e){}
-    const err = new Error(message);
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok || data.ok === false){
+    const err = new Error(data.error || `Server error ${res.status}`);
     err.status = res.status;
     throw err;
   }
-  return res.status === 204 ? null : res.json();
+  return data;
 }
 
-function rawUrl(path){
-  const encodedPath = String(path).split("/").map(encodeURIComponent).join("/");
-  return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${DATA_BRANCH}/${encodedPath}?v=${Date.now()}`;
+function imageUrl(comic){
+  const url = comic.url || "";
+  return /^https?:/i.test(url) ? url : apiUrl(url);
 }
 
 async function loadRecipes(silent = false){
   if(syncInFlight) return;
   syncInFlight = true;
-  if(!silent) subcount.textContent = "syncing recipes...";
+  if(!silent) subcount.textContent = "loading recipes...";
   try{
-    const tree = await githubApi(`git/trees/${encodeURIComponent(DATA_BRANCH)}?recursive=1`, {}, Boolean(githubToken));
-    const entries = tree.tree || [];
-    const files = entries.filter(item =>
-      item.type === "blob" &&
-      /^users\/[^/]+\/recipes\/[^/]+\.json$/.test(item.path)
-    );
-    const loaded = await Promise.all(files.map(async item => {
-      const res = await fetch(rawUrl(item.path), {cache:"no-store"});
-      if(!res.ok) throw new Error(`Could not read ${item.path}`);
-      const parsed = await res.json();
-      const owner = item.path.split("/")[1];
-      const slug = item.path.split("/").pop().replace(/\.json$/, "");
-      return withMeta(parsed, {_path:item.path, _sha:item.sha, _owner:owner, _slug:slug});
-    }));
-    recipes = loaded.sort((a,b) => a.title.localeCompare(b.title));
+    const data = await api("/api/recipes");
+    recipes = data.recipes || [];
     lastError = "";
     lastSyncAt = new Date();
   }catch(e){
-    if(e.status === 404){
-      recipes = [];
-      lastError = "";
-      lastSyncAt = new Date();
-    }else{
-      lastError = "Could not sync GitHub recipes (" + (e.message || "network error") + ").";
-    }
+    lastError = "Could not reach the recipe service (" + (e.message || "network error") + ").";
   }finally{
     syncInFlight = false;
     render();
   }
-}
-
-// Generated strips arrive as base64 from the comic service and are committed
-// to the data branch so recipes keep working as plain static JSON + PNG.
-async function uploadComicImage(path, base64Png, message){
-  const sha = await getFileSha(path);
-  const body = {
-    message,
-    content:base64Png,
-    branch:DATA_BRANCH
-  };
-  if(sha) body.sha = sha;
-  await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
-    method:"PUT",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(body)
-  }, true);
-  return path;
 }
 
 function startSyncTimer(){
@@ -430,230 +237,7 @@ function startSyncTimer(){
   syncTimer = setInterval(() => loadRecipes(true), POLL_MS);
 }
 
-function requireGithubWrite(){
-  if(githubToken && githubUser) return true;
-  openGithubSettings();
-  showToast("Add GitHub access first");
-  return false;
-}
-
-function bytesToBase64(bytes){
-  let binary = "";
-  const chunk = 0x8000;
-  for(let i = 0; i < bytes.length; i += chunk){
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
-function encodeJson(obj){
-  return bytesToBase64(new TextEncoder().encode(JSON.stringify(obj, null, 2)));
-}
-
-function recipePathFor(recipe, existing){
-  if(existing && existing._path) return existing._path;
-  return `users/${githubUser}/recipes/${slugify(recipe.slug || recipe.title)}.json`;
-}
-
-async function getFileSha(path){
-  try{
-    const data = await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}?ref=${encodeURIComponent(DATA_BRANCH)}`, {}, true);
-    return data.sha || null;
-  }catch(e){
-    if(e.status === 404) return null;
-    throw e;
-  }
-}
-
-async function saveRecipeToGithub(recipe, existing){
-  if(!requireGithubWrite()) return false;
-  const stored = recipeForStorage({...recipe, author:recipe.author || githubUser});
-  const path = recipePathFor(stored, existing);
-  const sha = await getFileSha(path);
-  const body = {
-    message:`Save recipe: ${stored.title}`,
-    content:encodeJson(stored),
-    branch:DATA_BRANCH
-  };
-  if(sha) body.sha = sha;
-  await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
-    method:"PUT",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(body)
-  }, true);
-  await loadRecipes(true);
-  return true;
-}
-
-async function deleteRecipeFromGithub(recipe){
-  if(!requireGithubWrite()) return false;
-  if(!recipe._path) return false;
-  const sha = await getFileSha(recipe._path);
-  if(!sha) return false;
-  await githubApi(`contents/${encodeURIComponent(recipe._path).replace(/%2F/g, "/")}`, {
-    method:"DELETE",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      message:`Delete recipe: ${recipe.title}`,
-      sha,
-      branch:DATA_BRANCH
-    })
-  }, true);
-  await loadRecipes(true);
-  return true;
-}
-
-async function testGithubWriteAccess(){
-  const slug = "access-test-" + Date.now();
-  const path = `users/${githubUser}/recipes/${slug}.json`;
-  const body = {
-    message:"Test RecipeBook write access",
-    content:encodeJson({
-      format:"family-recipe-box.recipe.v1",
-      id:slug,
-      slug,
-      title:"RecipeBook Access Test",
-      category:"Other",
-      servings:"",
-      contributor:githubUser,
-      author:githubUser,
-      ingredients:[],
-      steps:[],
-      notes:"Temporary permission test",
-      updatedAt:new Date().toISOString()
-    }),
-    branch:DATA_BRANCH
-  };
-  const created = await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
-    method:"PUT",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(body)
-  }, true);
-  if(created.content && created.content.sha){
-    await githubApi(`contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
-      method:"DELETE",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        message:"Remove RecipeBook write access test",
-        sha:created.content.sha,
-        branch:DATA_BRANCH
-      })
-    }, true);
-  }
-}
-
-function githubPermissionHint(message){
-  if(/resource not accessible by personal access token/i.test(message || "")){
-    return "Token cannot write this repo. Recreate it as a fine-grained token for farag4m/RecipeBook with Contents: Read and write.";
-  }
-  if(/bad credentials/i.test(message || "")){
-    return "Token is invalid or revoked. Create a new fine-grained token.";
-  }
-  return message || "GitHub error";
-}
-
-// --- Comic generation ------------------------------------------------------
-// Steps are sent to the Groq-backed comic service, which caps the recipe at
-// 12 steps, splits it into 1-4 strips of about 3 steps, and paints one comic
-// page per strip. The returned images are committed to the data branch.
-
-const COMIC_TIMEOUT_MS = 300000;
-
-function comicPathFor(recipe, index){
-  return `${COMIC_DIR}/${slugify(recipe.slug || recipe.title)}/strip-${index + 1}.png`;
-}
-
-// The service may return PNG, JPEG or an SVG storyboard; GitHub-hosted images
-// are always stored as PNG so raw.githubusercontent serves them inline.
-function toPngBase64(mime, base64){
-  return new Promise((resolve, reject) => {
-    if(/png/i.test(mime)) return resolve(base64);
-    const img = new Image();
-    img.onload = () => {
-      try{
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth || img.width || 1440;
-        canvas.height = img.naturalHeight || img.height || 576;
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#F6EDDA";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/png").split(",")[1]);
-      }catch(e){ reject(e); }
-    };
-    img.onerror = () => reject(new Error("Could not read the generated image"));
-    img.src = `data:${mime};base64,${base64}`;
-  });
-}
-
-async function comicServiceHealth(){
-  const res = await fetch(`${comicApiBase()}/api/health`, {cache:"no-store"});
-  if(!res.ok) throw new Error(`Comic service ${res.status}`);
-  return res.json();
-}
-
-async function requestComics(recipe){
-  const res = await fetch(`${comicApiBase()}/api/comics`, {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      title:recipe.title,
-      category:recipe.category,
-      servings:recipe.servings,
-      ingredients:recipe.ingredients,
-      steps:recipe.steps.map((text, idx) => ({
-        title:(recipe.stepTitles && recipe.stepTitles[idx]) || "",
-        text
-      }))
-    }),
-    signal:AbortSignal.timeout(COMIC_TIMEOUT_MS)
-  });
-  const data = await res.json().catch(() => ({}));
-  if(!res.ok || !data.ok) throw new Error(data.error || `Comic service ${res.status}`);
-  return data;
-}
-
-// Generates strips, commits the PNGs, and returns the recipe with comic refs.
-// A failure here never blocks the save - the recipe is stored without comics.
-async function generateRecipeComics(recipe, report = () => {}){
-  if(recipe.steps.length === 0) return {...recipe, comics:[]};
-
-  report("Asking the comic service for a storyboard...");
-  const result = await requestComics(recipe);
-
-  const plan = result.plan || {};
-  report(
-    `Drawing ${plan.chunkCount} comic${plan.chunkCount === 1 ? "" : "s"} ` +
-    `from ${plan.usedSteps} step${plan.usedSteps === 1 ? "" : "s"}` +
-    (plan.condensed ? ` (condensed from ${plan.submittedSteps})` : "") + "..."
-  );
-
-  const comics = [];
-  for(const comic of result.comics){
-    report(`Saving comic ${comic.index + 1} of ${result.comics.length}...`);
-    const png = await toPngBase64(comic.image.mime, comic.image.base64);
-    const path = comicPathFor(recipe, comic.index);
-    await uploadComicImage(path, png, `Comic ${comic.index + 1} for ${recipe.title}`);
-    comics.push({
-      path,
-      name:`${recipe.title} - part ${comic.index + 1}`,
-      stepRange:comic.stepRange,
-      panels:comic.panels.map(panel => ({stepIndex:panel.stepIndex, caption:panel.caption}))
-    });
-  }
-
-  // The service may have condensed an oversized recipe; keep what it drew.
-  const steps = Array.isArray(result.steps) && result.steps.length
-    ? result.steps
-    : recipe.steps.map(text => ({title:"", text}));
-
-  return {
-    ...recipe,
-    steps:steps.map(step => step.text),
-    stepTitles:steps.map((step, idx) => step.title || recipe.stepTitles[idx] || step.text),
-    comics:normalizeComics(comics)
-  };
-}
+// --- icons -----------------------------------------------------------------
 
 const ING_ICONS = [
   [/egg/i,"🥚"],[/flour/i,"🌾"],[/sugar/i,"🍬"],[/butter/i,"🧈"],[/milk|cream/i,"🥛"],
@@ -677,6 +261,8 @@ function guessStepIcon(text){
   return "👉";
 }
 
+// --- rendering -------------------------------------------------------------
+
 function render(){
   const counts = {};
   CATEGORIES.forEach(c => counts[c] = 0);
@@ -696,10 +282,10 @@ function render(){
 
   subcount.innerHTML = lastError
     ? `<span class="err-banner">⚠️ ${escapeHtml(lastError)}</span>`
-    : `${recipes.length} recipe${recipes.length === 1 ? "" : "s"} in GitHub <span class="sync-pill">${lastSyncAt ? "synced " + lastSyncAt.toLocaleTimeString() : "syncing"}</span>`;
+    : `${recipes.length} recipe${recipes.length === 1 ? "" : "s"} <span class="sync-pill">${lastSyncAt ? "synced " + lastSyncAt.toLocaleTimeString() : "loading"}</span>`;
 
   if(filtered.length === 0){
-    grid.innerHTML = `<div class="empty"><b>Nothing here yet</b>${recipes.length === 0 ? "Add your first family recipe to GitHub." : "No recipes match this view."}</div>`;
+    grid.innerHTML = `<div class="empty"><b>Nothing here yet</b>${recipes.length === 0 ? "Add your first family recipe." : "No recipes match this view."}</div>`;
     return;
   }
 
@@ -707,121 +293,10 @@ function render(){
     <div class="card" data-id="${escapeHtml(r.id)}">
       <div class="card-icon">${CAT_ICON[r.category] || "⭐"}</div>
       <h3>${escapeHtml(r.title)}</h3>
-      <div class="meta"><span>${r.servings ? "🍽️ " + escapeHtml(r.servings) : ""}</span><span>${r.author || r.contributor ? "👤 " + escapeHtml(r.author || r.contributor) : ""}</span></div>
+      <div class="meta"><span>${r.servings ? "🍽️ " + escapeHtml(r.servings) : ""}</span><span>${r.contributor ? "👤 " + escapeHtml(r.contributor) : ""}</span></div>
     </div>
   `).join("");
   grid.querySelectorAll(".card").forEach(c => c.onclick = () => openView(c.dataset.id));
-}
-
-function showToast(msg){
-  const t = document.createElement("div");
-  t.className = "toast";
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.classList.add("show"), 10);
-  setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 2400);
-}
-
-function makeRecipeShareUrl(recipe){
-  const payload = btoa(unescape(encodeURIComponent(JSON.stringify(recipeForStorage(recipe)))));
-  const url = new URL(location.href);
-  url.hash = "recipe=" + payload;
-  return url.toString();
-}
-
-function recipeFormatExample(){
-  return {
-    format:"family-recipe-box.recipe.v1",
-    title:"Mujadara",
-    category:"Mains",
-    servings:"4",
-    contributor:"Aunt Rosa",
-    ingredients:[
-      {
-        text:"1 cup brown or green lentils",
-        step:{
-          title:"Rinse lentils",
-          text:"Rinse lentils, then boil for 15 minutes until just tender."
-        }
-      },
-      {
-        text:"1 cup basmati rice",
-        step:{
-          title:"Wash rice",
-          text:"Rinse rice until the water runs clear."
-        }
-      },
-      {
-        text:"3 large onions, thinly sliced",
-        step:{
-          title:"Saute onions",
-          text:"Cook onions in olive oil until deep golden brown."
-        }
-      }
-    ],
-    steps:[
-      {title:"Serve", text:"Fluff everything together and serve warm."}
-    ],
-    notes:"Ingredient steps display in ingredient order. Comic strips are drawn from the steps on save - leave comics out of the JSON."
-  };
-}
-
-function openRecipeJsonFormat(){
-  const overlay = document.createElement("div");
-  overlay.className = "overlay";
-  const example = JSON.stringify(recipeFormatExample(), null, 2);
-  overlay.innerHTML = `
-    <div class="modal wide">
-      <button class="modal-close">&times;</button>
-      <h2>Recipe JSON Format</h2>
-      <div class="rule"></div>
-      <textarea id="json-format-output" rows="18" readonly>${escapeHtml(example)}</textarea>
-      <div class="modal-actions">
-        <button class="btn-primary" id="copyJsonFormat">Copy Format</button>
-        <button class="btn-ghost" id="addJsonFromFormat">Add JSON</button>
-      </div>
-      <div id="json-format-status"></div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
-  overlay.querySelector("#copyJsonFormat").onclick = async () => {
-    await navigator.clipboard.writeText(example);
-    overlay.querySelector("#json-format-status").innerHTML = `<div class="status-line">Copied.</div>`;
-  };
-  overlay.querySelector("#addJsonFromFormat").onclick = () => {
-    overlay.remove();
-    openImport(example);
-  };
-}
-
-function importSharedRecipeFromHash(){
-  if(!location.hash.startsWith("#recipe=")) return;
-  try{
-    const json = decodeURIComponent(escape(atob(location.hash.slice(8))));
-    const incoming = normalizeRecipe(JSON.parse(json));
-    history.replaceState(null, "", location.pathname + location.search);
-    openForm(null, incoming);
-    showToast(`Review and save "${incoming.title}"`);
-  }catch(e){
-    lastError = "That shared recipe link could not be read.";
-    render();
-  }
-}
-
-async function shareRecipe(recipe){
-  const url = makeRecipeShareUrl(recipe);
-  const text = `${recipe.title}\n\nOpen this link to add it to The Family Recipe Box:\n${url}`;
-  if(navigator.share){
-    try{
-      await navigator.share({title:recipe.title, text, url});
-      return;
-    }catch(e){
-      if(e.name === "AbortError") return;
-    }
-  }
-  await navigator.clipboard.writeText(text);
-  showToast("Share link copied");
 }
 
 function plainStepRow(recipe, idx){
@@ -833,10 +308,8 @@ function plainStepRow(recipe, idx){
 // Comics cover consecutive runs of steps. Each strip is drawn with its panel
 // captions underneath; any step no comic covers falls back to a plain row.
 function renderStepDisplay(recipe){
-  const comics = (recipe.comics || []).filter(comic => comic.stepRange);
-  if(comics.length === 0){
-    return recipe.steps.map((step, idx) => plainStepRow(recipe, idx)).join("");
-  }
+  const comics = (recipe.comics || []).filter(c => Array.isArray(c.stepRange));
+  if(comics.length === 0) return recipe.steps.map((s, i) => plainStepRow(recipe, i)).join("");
 
   const covered = new Set();
   const ordered = [...comics].sort((a, b) => a.stepRange[0] - b.stepRange[0]);
@@ -847,7 +320,6 @@ function renderStepDisplay(recipe){
     const from = Math.max(1, comic.stepRange[0]) - 1;
     const to = Math.min(recipe.steps.length, comic.stepRange[1]) - 1;
 
-    // Any steps before this strip that nothing illustrates.
     for(let idx = cursor; idx < from; idx++){
       if(!covered.has(idx)){ blocks.push(plainStepRow(recipe, idx)); covered.add(idx); }
     }
@@ -856,7 +328,7 @@ function renderStepDisplay(recipe){
     for(let idx = from; idx <= to; idx++){
       if(idx < 0 || idx >= recipe.steps.length) continue;
       covered.add(idx);
-      const panel = comic.panels.find(p => p.stepIndex === idx);
+      const panel = (comic.panels || []).find(p => p.stepIndex === idx);
       const title = panel?.caption || (recipe.stepTitles && recipe.stepTitles[idx]) || "";
       captions.push(`
         <div class="comic-caption">
@@ -874,7 +346,7 @@ function renderStepDisplay(recipe){
           <span class="comic-badge">Part ${comic.index + 1}</span>
           <span class="hint">Steps ${from + 1}${to > from ? "-" + (to + 1) : ""}</span>
         </div>
-        <img src="${escapeHtml(rawUrl(comic.path))}" alt="${escapeHtml(comic.name)}" loading="lazy">
+        <img src="${escapeHtml(imageUrl(comic))}" alt="${escapeHtml(comic.name || "Comic")}" loading="lazy">
         <div class="comic-captions">${captions.join("")}</div>
       </div>`);
 
@@ -885,6 +357,30 @@ function renderStepDisplay(recipe){
     if(!covered.has(idx)) blocks.push(plainStepRow(recipe, idx));
   }
   return blocks.join("");
+}
+
+function showToast(msg){
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add("show"), 10);
+  setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 2400);
+}
+
+// --- recipe view -----------------------------------------------------------
+
+function makeRecipeShareUrl(recipe){
+  return `${location.origin}${location.pathname}#recipe=${encodeURIComponent(recipe.id)}`;
+}
+
+async function shareRecipe(recipe){
+  const url = makeRecipeShareUrl(recipe);
+  if(navigator.share){
+    try{ await navigator.share({title:recipe.title, url}); return; }catch(e){ if(e.name === "AbortError") return; }
+  }
+  await navigator.clipboard.writeText(url);
+  showToast("Share link copied");
 }
 
 function openView(id){
@@ -910,8 +406,10 @@ function openView(id){
       <div class="modal-actions">
         <button class="btn-primary btn-small" id="shareBtn">Share</button>
         <button class="btn-ghost btn-small" id="editBtn">Edit</button>
+        <button class="btn-ai btn-small" id="redrawBtn">${(r.comics || []).length ? "Redraw Comics" : "Draw Comics"}</button>
         <button class="btn-danger btn-small" id="delBtn">Delete</button>
       </div>
+      <div id="view-status"></div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -919,24 +417,43 @@ function openView(id){
   overlay.onclick = e => { if(e.target === overlay) overlay.remove(); };
   overlay.querySelector("#shareBtn").onclick = () => shareRecipe(r);
   overlay.querySelector("#editBtn").onclick = () => { overlay.remove(); openForm(r); };
+
+  const redrawBtn = overlay.querySelector("#redrawBtn");
+  const viewStatus = overlay.querySelector("#view-status");
+  redrawBtn.onclick = async () => {
+    redrawBtn.disabled = true;
+    viewStatus.innerHTML = `<div class="status-line">Drawing comics... this takes up to a minute.</div>`;
+    try{
+      await api(`/api/recipes/${encodeURIComponent(r.id)}/comics`, {method:"POST"});
+      await loadRecipes(true);
+      overlay.remove();
+      showToast("Comics drawn");
+      openView(r.id);
+    }catch(e){
+      redrawBtn.disabled = false;
+      viewStatus.innerHTML = `<div class="error-msg">Could not draw comics: ${escapeHtml(e.message)}</div>`;
+    }
+  };
+
   const delBtn = overlay.querySelector("#delBtn");
   delBtn.onclick = () => {
     delBtn.outerHTML = `<span class="confirm-row">Delete for good? <button class="btn-danger btn-small" id="delYes">Yes, delete</button> <button class="btn-ghost btn-small" id="delNo">Cancel</button></span>`;
     overlay.querySelector("#delNo").onclick = () => { overlay.remove(); openView(r.id); };
     overlay.querySelector("#delYes").onclick = async () => {
       try{
-        const deleted = await deleteRecipeFromGithub(r);
-        if(deleted){
-          overlay.remove();
-          showToast(`Deleted "${r.title}"`);
-        }
+        await api(`/api/recipes/${encodeURIComponent(r.id)}`, {method:"DELETE"});
+        await loadRecipes(true);
+        overlay.remove();
+        showToast(`Deleted "${r.title}"`);
       }catch(e){
-        lastError = "Could not delete recipe (" + (e.message || "GitHub error") + ").";
+        lastError = "Could not delete recipe (" + e.message + ").";
         render();
       }
     };
   };
 }
+
+// --- add / edit ------------------------------------------------------------
 
 function openForm(existing, prefill){
   const data = existing || prefill || {title:"", category:"Mains", servings:"", contributor:"", ingredients:[], steps:[], notes:""};
@@ -969,7 +486,7 @@ function openForm(existing, prefill){
       <textarea id="f-notes" rows="2">${escapeHtml(data.notes || "")}</textarea>
       <div class="tool-box" style="margin-top:16px;">
         <div class="confirm-row">
-          <input type="checkbox" id="f-comics" checked style="width:auto;">
+          <input type="checkbox" id="f-comics" ${existing && (existing.comics || []).length ? "" : "checked"} style="width:auto;">
           <label for="f-comics" style="margin:0;">Draw comic strips for the steps</label>
         </div>
         <div class="hint">Steps are capped at 12 and split into 1-4 strips of about 3 panels. Drawing takes up to a minute.</div>
@@ -988,7 +505,6 @@ function openForm(existing, prefill){
     const titleField = overlay.querySelector("#f-title");
     const saveBtn = overlay.querySelector("#saveBtn");
     const statusEl = overlay.querySelector("#form-status");
-    const makeComics = overlay.querySelector("#f-comics");
     const title = titleField.value.trim();
     let titleErr = overlay.querySelector("#title-err");
     if(!title){
@@ -1003,8 +519,9 @@ function openForm(existing, prefill){
       return;
     }
     if(titleErr) titleErr.remove();
-    const rec = normalizeRecipe({
-      id:existing ? existing.id : uid(),
+
+    const generateComics = overlay.querySelector("#f-comics").checked;
+    const payload = {
       title,
       category:overlay.querySelector("#f-cat").value,
       servings:overlay.querySelector("#f-servings").value.trim(),
@@ -1012,45 +529,27 @@ function openForm(existing, prefill){
       ingredients:overlay.querySelector("#f-ingredients").value.split("\n").map(s => s.trim()).filter(Boolean),
       steps:overlay.querySelector("#f-steps").value.split("\n").map(s => s.trim()).filter(Boolean),
       notes:overlay.querySelector("#f-notes").value.trim(),
-      // Keep existing artwork when the author opts out of redrawing.
-      comics:existing ? existing.comics : []
-    });
+      generateComics
+    };
+
     try{
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving...";
-
-      let toSave = rec;
-      if(makeComics.checked && rec.steps.length){
-        try{
-          toSave = await generateRecipeComics(rec, msg => {
-            statusEl.innerHTML = `<div class="status-line">${escapeHtml(msg)}</div>`;
-          });
-        }catch(e){
-          // Comics are a bonus, never a gate on saving the recipe.
-          statusEl.innerHTML = `<div class="error-msg">Comics failed (${escapeHtml(e.message)}). Saving the recipe without them...</div>`;
-          toSave = {...rec, comics:[]};
-        }
-      }
-
-      statusEl.innerHTML = `<div class="status-line">Saving to GitHub...</div>`;
-      const saved = await saveRecipeToGithub(toSave, existing);
-      if(saved){
-        overlay.remove();
-        showToast(`Saved "${rec.title}"`);
-      }else{
-        saveBtn.disabled = false;
-        saveBtn.textContent = "Save Recipe";
-        statusEl.innerHTML = `<div class="error-msg">GitHub access is required before saving.</div>`;
-      }
+      statusEl.innerHTML = `<div class="status-line">${generateComics ? "Saving and drawing comics... this takes up to a minute." : "Saving..."}</div>`;
+      if(existing) await api(`/api/recipes/${encodeURIComponent(existing.id)}`, {method:"PUT", body:JSON.stringify(payload)});
+      else await api("/api/recipes", {method:"POST", body:JSON.stringify(payload)});
+      await loadRecipes(true);
+      overlay.remove();
+      showToast(`Saved "${title}"`);
     }catch(e){
       saveBtn.disabled = false;
       saveBtn.textContent = "Save Recipe";
-      statusEl.innerHTML = `<div class="error-msg">Could not save to GitHub: ${escapeHtml(githubPermissionHint(e.message))}</div>`;
-      lastError = "Could not save recipe (" + (e.message || "GitHub error") + ").";
-      render();
+      statusEl.innerHTML = `<div class="error-msg">Could not save: ${escapeHtml(e.message)}</div>`;
     }
   };
 }
+
+// --- paste / import --------------------------------------------------------
 
 function parseRecipeText(raw){
   const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
@@ -1069,7 +568,7 @@ function parseRecipeText(raw){
     else if(section === "notes") recipe.notes += (recipe.notes ? " " : "") + cleaned;
     else recipe.ingredients.push(cleaned);
   }
-  return normalizeRecipe(recipe);
+  return recipe;
 }
 
 function openFormatPaste(){
@@ -1084,7 +583,7 @@ function openFormatPaste(){
         <label style="margin-top:0">Paste recipe text</label>
         <textarea id="paste-input" rows="10" placeholder="First line becomes the title. Use Ingredients, Steps, Notes, Servings, or From headings when you have them."></textarea>
         <button class="btn-ai" id="format-run" style="margin-top:12px;width:100%;">Format into a recipe card</button>
-        <div class="hint">This works fully in the browser. Photo reading and hosted AI need a server or exposed API key, so they are intentionally left out.</div>
+        <div class="hint">Runs in the browser. The formatted card opens in the editor so you can check it before saving.</div>
       </div>
     </div>
   `;
@@ -1099,28 +598,58 @@ function openFormatPaste(){
   };
 }
 
-function recipesFromJson(parsed){
-  if(Array.isArray(parsed)) return parsed;
-  if(parsed && Array.isArray(parsed.recipes)) return parsed.recipes;
-  if(parsed && parsed.recipe) return [parsed.recipe];
-  return [parsed];
+function recipeFormatExample(){
+  return {
+    title:"Mujadara",
+    category:"Mains",
+    servings:"4",
+    contributor:"Aunt Rosa",
+    ingredients:[
+      {text:"1 cup brown or green lentils", step:{title:"Rinse lentils", text:"Rinse lentils, then boil for 15 minutes until just tender."}},
+      {text:"1 cup basmati rice", step:{title:"Wash rice", text:"Rinse rice until the water runs clear."}},
+      {text:"3 large onions, thinly sliced", step:{title:"Saute onions", text:"Cook onions in olive oil until deep golden brown."}}
+    ],
+    steps:[{title:"Serve", text:"Fluff everything together and serve warm."}],
+    notes:"Ingredient steps display in ingredient order. Comics are drawn on save - leave them out of the JSON."
+  };
+}
+
+function openRecipeJsonFormat(){
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  const example = JSON.stringify(recipeFormatExample(), null, 2);
+  overlay.innerHTML = `
+    <div class="modal wide">
+      <button class="modal-close">&times;</button>
+      <h2>Recipe JSON Format</h2>
+      <div class="rule"></div>
+      <textarea id="json-format-output" rows="18" readonly>${escapeHtml(example)}</textarea>
+      <div class="modal-actions">
+        <button class="btn-primary" id="copyJsonFormat">Copy Format</button>
+        <button class="btn-ghost" id="addJsonFromFormat">Add JSON</button>
+      </div>
+      <div id="json-format-status"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
+  overlay.querySelector("#copyJsonFormat").onclick = async () => {
+    await navigator.clipboard.writeText(example);
+    overlay.querySelector("#json-format-status").innerHTML = `<div class="status-line">Format copied.</div>`;
+  };
+  overlay.querySelector("#addJsonFromFormat").onclick = () => { overlay.remove(); openImport(example); };
 }
 
 function cleanJsonInput(raw){
   let text = String(raw || "").trim();
-  if(text.startsWith("```")){
-    text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  }
+  if(text.startsWith("```")) text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   return text;
 }
 
 function parseRecipeJson(raw){
   const text = cleanJsonInput(raw);
   if(!text) throw new Error("Paste recipe JSON first.");
-  const parsed = JSON.parse(text);
-  const incoming = recipesFromJson(parsed).filter(Boolean);
-  if(incoming.length === 0) throw new Error("No recipes were found in that JSON.");
-  return incoming;
+  return JSON.parse(text);
 }
 
 function openImport(prefill = ""){
@@ -1133,13 +662,13 @@ function openImport(prefill = ""){
       <div class="rule"></div>
       <div class="tool-box">
         <label style="margin-top:0">Paste recipe JSON</label>
-        <textarea id="import-input" rows="12" placeholder='Paste one recipe, {"recipe": ...}, or {"recipes": [...]} here. Imported recipes are committed to GitHub.'>${escapeHtml(prefill)}</textarea>
+        <textarea id="import-input" rows="12" placeholder='Paste one recipe, {"recipe": ...}, or {"recipes": [...]} here.'>${escapeHtml(prefill)}</textarea>
         <div class="confirm-row" style="margin-top:12px;">
           <input type="checkbox" id="import-comics" checked style="width:auto;">
           <label for="import-comics" style="margin:0;">Draw comic strips for each imported recipe</label>
         </div>
         <div class="modal-actions">
-          <button class="btn-primary" id="import-run">Import to GitHub</button>
+          <button class="btn-primary" id="import-run">Import</button>
           <button class="btn-ghost" id="import-file">Choose File</button>
           <input type="file" id="file-input" accept="application/json,.json" hidden>
         </div>
@@ -1160,153 +689,92 @@ function openImport(prefill = ""){
     reader.readAsText(file);
   };
   overlay.querySelector("#import-run").onclick = async () => {
-    if(!requireGithubWrite()) return;
     const importBtn = overlay.querySelector("#import-run");
     const status = overlay.querySelector("#import-status");
     try{
       importBtn.disabled = true;
-      status.innerHTML = `<div class="status-line">Reading JSON...</div>`;
-      const incoming = parseRecipeJson(input.value);
-      const normalized = incoming.map(normalizeRecipe);
-      const withComics = overlay.querySelector("#import-comics").checked;
-      for(const rec of normalized){
-        let toSave = {...rec, id:uid()};
-        if(withComics && toSave.steps.length){
-          try{
-            toSave = await generateRecipeComics(toSave, msg => {
-              status.innerHTML = `<div class="status-line">${escapeHtml(rec.title)}: ${escapeHtml(msg)}</div>`;
-            });
-          }catch(e){
-            status.innerHTML = `<div class="error-msg">Comics failed for ${escapeHtml(rec.title)} (${escapeHtml(e.message)}). Importing without them...</div>`;
-            toSave = {...toSave, comics:[]};
-          }
-        }
-        status.innerHTML = `<div class="status-line">Saving ${escapeHtml(rec.title)}...</div>`;
-        await saveRecipeToGithub(toSave, null);
-      }
+      const parsed = parseRecipeJson(input.value);
+      const generateComics = overlay.querySelector("#import-comics").checked;
+      status.innerHTML = `<div class="status-line">Importing${generateComics ? " and drawing comics" : ""}... this can take a few minutes.</div>`;
+      const payload = Array.isArray(parsed) ? {recipes:parsed, generateComics}
+        : parsed.recipes ? {recipes:parsed.recipes, generateComics}
+        : parsed.recipe ? {recipes:[parsed.recipe], generateComics}
+        : {recipes:[parsed], generateComics};
+      const result = await api("/api/import", {method:"POST", body:JSON.stringify(payload)});
+      await loadRecipes(true);
       overlay.remove();
-      showToast(`Imported ${normalized.length} recipe${normalized.length === 1 ? "" : "s"}`);
+      showToast(`Imported ${result.imported} recipe${result.imported === 1 ? "" : "s"}`);
     }catch(e){
       importBtn.disabled = false;
-      status.innerHTML = `<div class="error-msg">Could not import JSON: ${escapeHtml(githubPermissionHint(e.message))}</div>`;
+      status.innerHTML = `<div class="error-msg">Could not import: ${escapeHtml(e.message)}</div>`;
     }
   };
 }
 
-function openGithubSettings(){
+// --- settings --------------------------------------------------------------
+
+function openServiceSettings(){
   const overlay = document.createElement("div");
   overlay.className = "overlay";
   overlay.innerHTML = `
     <div class="modal wide">
       <button class="modal-close">&times;</button>
-      <h2>GitHub Access</h2>
+      <h2>Recipe Service</h2>
       <div class="rule"></div>
       <div class="tool-box">
-        <div class="status-line">
-          Repo: ${GITHUB_OWNER}/${GITHUB_REPO}<br>
-          Data branch: ${DATA_BRANCH}<br>
-          Public reads refresh every ${Math.round(POLL_MS / 1000)} seconds.
-        </div>
-        <label>GitHub Username</label>
-        <input type="text" id="gh-user" value="${escapeHtml(githubUser)}" placeholder="your-github-username">
-        <label>Fine-grained token</label>
-        <input type="text" id="gh-token" value="${escapeHtml(githubToken)}" placeholder="Contents: Read and write for this repo">
-        <div class="hint">The token is kept in this browser tab session only. It is needed only for adding, editing, deleting, or importing recipes.</div>
-        <div class="modal-actions">
-          <button class="btn-primary" id="gh-save">Save Access</button>
-          <button class="btn-ai" id="gh-test">Test</button>
-          <button class="btn-danger" id="gh-clear">Clear</button>
-        </div>
-        <div id="gh-status"></div>
-      </div>
-      <div class="tool-box" style="margin-top:16px;">
-        <div class="field-label" style="margin-top:0;">Comic Service</div>
+        <div class="status-line">Recipes and comic art are stored on the server. No sign-in needed.</div>
         <label>Service URL</label>
-        <input type="text" id="comic-url" value="${escapeHtml(localStorage.getItem(COMIC_API_KEY) || "")}" placeholder="${escapeHtml(comicApiBase())}">
-        <div class="hint">Leave blank to use this site's own origin. The Groq API key lives on the server and is never sent to the browser.</div>
+        <input type="text" id="api-url" value="${escapeHtml(localStorage.getItem(API_KEY_STORE) || "")}" placeholder="${escapeHtml(apiBase())}">
+        <div class="hint">Leave blank to use this site's own origin.</div>
         <div class="modal-actions">
-          <button class="btn-primary" id="comic-save">Save URL</button>
-          <button class="btn-ai" id="comic-test">Test Service</button>
+          <button class="btn-primary" id="api-save">Save URL</button>
+          <button class="btn-ai" id="api-test">Test Service</button>
         </div>
-        <div id="comic-status"></div>
+        <div id="api-status"></div>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
-  const userInput = overlay.querySelector("#gh-user");
-  const tokenInput = overlay.querySelector("#gh-token");
-  const status = overlay.querySelector("#gh-status");
-  function storeAccess(){
-    githubUser = userInput.value.trim();
-    githubToken = tokenInput.value.trim();
-    if(githubUser) sessionStorage.setItem(USER_KEY, githubUser); else sessionStorage.removeItem(USER_KEY);
-    if(githubToken) sessionStorage.setItem(TOKEN_KEY, githubToken); else sessionStorage.removeItem(TOKEN_KEY);
+  const urlInput = overlay.querySelector("#api-url");
+  const status = overlay.querySelector("#api-status");
+  function store(){
+    const value = urlInput.value.trim().replace(/\/+$/, "");
+    if(value) localStorage.setItem(API_KEY_STORE, value);
+    else localStorage.removeItem(API_KEY_STORE);
   }
   overlay.querySelector(".modal-close").onclick = () => overlay.remove();
-  overlay.querySelector("#gh-save").onclick = () => {
-    storeAccess();
-    showToast("GitHub access saved");
-    overlay.remove();
-  };
-  overlay.querySelector("#gh-clear").onclick = () => {
-    githubUser = "";
-    githubToken = "";
-    sessionStorage.removeItem(USER_KEY);
-    sessionStorage.removeItem(TOKEN_KEY);
-    showToast("GitHub access cleared");
-    overlay.remove();
-  };
-  const comicUrl = overlay.querySelector("#comic-url");
-  const comicStatus = overlay.querySelector("#comic-status");
-  overlay.querySelector("#comic-save").onclick = () => {
-    const value = comicUrl.value.trim().replace(/\/+$/, "");
-    if(value) localStorage.setItem(COMIC_API_KEY, value);
-    else localStorage.removeItem(COMIC_API_KEY);
-    showToast("Comic service URL saved");
-  };
-  overlay.querySelector("#comic-test").onclick = async () => {
-    const value = comicUrl.value.trim().replace(/\/+$/, "");
-    if(value) localStorage.setItem(COMIC_API_KEY, value);
-    else localStorage.removeItem(COMIC_API_KEY);
-    comicStatus.innerHTML = `<div class="status-line">Contacting ${escapeHtml(comicApiBase())}...</div>`;
+  overlay.querySelector("#api-save").onclick = () => { store(); showToast("Service URL saved"); loadRecipes(true); };
+  overlay.querySelector("#api-test").onclick = async () => {
+    store();
+    status.innerHTML = `<div class="status-line">Contacting ${escapeHtml(apiBase())}...</div>`;
     try{
-      const health = await comicServiceHealth();
-      comicStatus.innerHTML = health.groq?.configured
-        ? `<div class="status-line">Service is up. Groq model ${escapeHtml(health.groq.model)}, artwork by ${escapeHtml(health.image.active)}. Up to ${health.limits.maxSteps} steps across ${health.limits.maxChunks} comics.</div>`
-        : `<div class="error-msg">Service is up but GROQ_API_KEY is not configured on it.</div>`;
+      const health = await api("/api/health");
+      const db = health.database || {};
+      status.innerHTML = `<div class="status-line">
+        Service up.<br>
+        Recipes stored: ${db.recipes ?? "?"} | comic images: ${db.images ?? "?"}<br>
+        Comics: ${health.groq?.configured ? escapeHtml(health.groq.model) + " + " + escapeHtml(health.image.active) : "not configured"}
+      </div>`;
     }catch(e){
-      comicStatus.innerHTML = `<div class="error-msg">Comic service unreachable: ${escapeHtml(e.message)}. A free Render service sleeps when idle - try again in a minute.</div>`;
-    }
-  };
-
-  overlay.querySelector("#gh-test").onclick = async () => {
-    storeAccess();
-    if(!githubUser || !githubToken){
-      status.innerHTML = `<div class="error-msg">Enter both username and token.</div>`;
-      return;
-    }
-      status.innerHTML = `<div class="status-line">Testing GitHub read/write access...</div>`;
-    try{
-      await testGithubWriteAccess();
-      status.innerHTML = `<div class="status-line">Token can write to ${GITHUB_OWNER}/${GITHUB_REPO}. Saving recipes should work.</div>`;
-    }catch(e){
-      status.innerHTML = `<div class="error-msg">GitHub test failed: ${escapeHtml(githubPermissionHint(e.message))}</div>`;
+      status.innerHTML = `<div class="error-msg">Service unreachable: ${escapeHtml(e.message)}. A free service sleeps when idle - try again in a minute.</div>`;
     }
   };
 }
 
 function exportBox(){
-  const blob = new Blob([JSON.stringify({
-    format:"family-recipe-box.export.v1",
-    recipes:recipes.map(recipeForStorage)
-  }, null, 2)], {type:"application/json"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "family-recipe-box.json";
-  document.body.appendChild(a);
-  a.click();
-  URL.revokeObjectURL(a.href);
-  a.remove();
+  window.open(apiUrl("/api/export"), "_blank");
+}
+
+function openSharedRecipeFromHash(){
+  const match = /#recipe=([^&]+)/.exec(location.hash);
+  if(!match) return;
+  const id = decodeURIComponent(match[1]);
+  history.replaceState(null, "", location.pathname);
+  const tryOpen = () => {
+    if(recipes.find(r => r.id === id)) openView(id);
+    else setTimeout(tryOpen, 400);
+  };
+  setTimeout(tryOpen, 400);
 }
 
 document.getElementById("search").addEventListener("input", e => { searchTerm = e.target.value; render(); });
@@ -1316,11 +784,11 @@ document.getElementById("btnJsonFormat").onclick = openRecipeJsonFormat;
 document.getElementById("btnAddJson").onclick = () => openImport();
 document.getElementById("btnImport").onclick = () => openImport();
 document.getElementById("btnSync").onclick = () => loadRecipes(false);
-document.getElementById("btnSettings").onclick = openGithubSettings;
+document.getElementById("btnSettings").onclick = openServiceSettings;
 document.getElementById("btnExport").onclick = exportBox;
 
 loadRecipes();
-importSharedRecipeFromHash();
+openSharedRecipeFromHash();
 startSyncTimer();
 </script>
 </body>

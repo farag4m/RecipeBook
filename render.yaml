@@ -27,3 +27,15 @@ services:
         value: gemini-3.1-flash-image
       - key: IMAGE_PROVIDER
         value: auto
+      # Recipes and comic art live here - free web services have no disk.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: family-recipe-box-db
+          property: connectionString
+
+databases:
+  - name: family-recipe-box-db
+    plan: free
+    region: oregon
+    databaseName: recipebox
+    user: recipebox
