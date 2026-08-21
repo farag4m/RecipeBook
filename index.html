@@ -146,7 +146,7 @@
       <div class="sub" id="subcount">loading recipes...</div>
     </div>
     <div class="header-actions">
-      <button class="btn-ai" id="btnFormat">Format Paste</button>
+      <button class="btn-ai" id="btnFormat">✨ Smart Add</button>
       <button class="btn-ghost" id="btnJsonFormat">JSON Format</button>
       <button class="btn-ghost" id="btnAddJson">Add JSON</button>
       <button class="btn-ghost" id="btnImport">Import</button>
@@ -574,7 +574,7 @@ function openForm(existing, prefill){
 
 // --- paste / import --------------------------------------------------------
 
-function parseRecipeText(raw){
+function parseRecipeTextLocally(raw){
   const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   const recipe = {title:lines[0] || "Untitled Recipe", category:"Other", servings:"", contributor:"", ingredients:[], steps:[], notes:""};
   let section = "ingredients";
@@ -594,30 +594,60 @@ function parseRecipeText(raw){
   return recipe;
 }
 
-function openFormatPaste(){
+// Smart Add: paste anything that contains a recipe and let the model work out
+// the title, ingredients and ordered steps. The local parser below is only a
+// fallback for when the service cannot be reached.
+function openSmartAdd(){
   const overlay = document.createElement("div");
   overlay.className = "overlay";
   overlay.innerHTML = `
     <div class="modal wide">
       <button class="modal-close">&times;</button>
-      <h2>Format Paste</h2>
+      <h2>✨ Smart Add</h2>
       <div class="rule"></div>
       <div class="tool-box">
-        <label style="margin-top:0">Paste recipe text</label>
-        <textarea id="paste-input" rows="10" placeholder="First line becomes the title. Use Ingredients, Steps, Notes, Servings, or From headings when you have them."></textarea>
-        <button class="btn-ai" id="format-run" style="margin-top:12px;width:100%;">Format into a recipe card</button>
-        <div class="hint">Runs in the browser. The formatted card opens in the editor so you can check it before saving.</div>
+        <label style="margin-top:0">Paste anything with a recipe in it</label>
+        <textarea id="smart-input" rows="12" placeholder="A text from your mum, a screenshot transcript, a blog ramble, scribbled notes, another language - any format. The AI works out the title, ingredients and steps."></textarea>
+        <button class="btn-ai" id="smart-run" style="margin-top:12px;width:100%;">Turn it into a recipe</button>
+        <div class="hint">You get to check and edit the result before anything is saved. Comics are drawn when you save.</div>
+        <div id="smart-status"></div>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
+  const input = overlay.querySelector("#smart-input");
+  const runBtn = overlay.querySelector("#smart-run");
+  const status = overlay.querySelector("#smart-status");
+
   overlay.querySelector(".modal-close").onclick = () => overlay.remove();
-  overlay.querySelector("#format-run").onclick = () => {
-    const text = overlay.querySelector("#paste-input").value.trim();
-    if(!text) return;
-    const parsed = parseRecipeText(text);
-    overlay.remove();
-    openForm(null, parsed);
+  runBtn.onclick = async () => {
+    const text = input.value.trim();
+    if(!text){
+      status.innerHTML = `<div class="error-msg">Paste something first.</div>`;
+      return;
+    }
+    runBtn.disabled = true;
+    runBtn.textContent = "Reading it...";
+    status.innerHTML = `<div class="status-line">Working out the ingredients and steps...</div>`;
+    try{
+      const result = await api("/api/parse", {method:"POST", body:JSON.stringify({text})});
+      const parsed = result.recipe;
+      overlay.remove();
+      showToast(`Found "${parsed.title}"`);
+      openForm(null, {
+        ...parsed,
+        steps: (parsed.steps || []).map(step => step.text),
+        stepTitles: (parsed.steps || []).map(step => step.title)
+      });
+    }catch(e){
+      runBtn.disabled = false;
+      runBtn.textContent = "Turn it into a recipe";
+      // Fall back to the local parser so a paste is never simply lost.
+      const local = parseRecipeTextLocally(text);
+      status.innerHTML = `<div class="error-msg">AI parsing failed: ${escapeHtml(e.message)}</div>
+        <div class="status-line">Opening a rough local parse instead - check it carefully.</div>`;
+      setTimeout(() => { overlay.remove(); openForm(null, local); }, 2200);
+    }
   };
 }
 
@@ -802,7 +832,7 @@ function openSharedRecipeFromHash(){
 
 document.getElementById("search").addEventListener("input", e => { searchTerm = e.target.value; render(); });
 document.getElementById("btnAdd").onclick = () => openForm(null);
-document.getElementById("btnFormat").onclick = openFormatPaste;
+document.getElementById("btnFormat").onclick = openSmartAdd;
 document.getElementById("btnJsonFormat").onclick = openRecipeJsonFormat;
 document.getElementById("btnAddJson").onclick = () => openImport();
 document.getElementById("btnImport").onclick = () => openImport();

@@ -17,6 +17,7 @@ import { buildPanelPrompt, seedFor, STYLE_NAME } from "./src/style.js";
 import { renderStrip, providerStatus } from "./src/image/index.js";
 import { normalizeRecipe, newId, slugify, CATEGORIES } from "./src/recipe.js";
 import { composeComicSvg, composePanelSvg } from "./src/comic/compose.js";
+import { parseRecipeText } from "./src/parse.js";
 import * as db from "./src/db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -268,6 +269,15 @@ app.delete("/api/recipes/:id", wrap(async (req, res) => {
   const removed = await db.deleteRecipe(req.params.id);
   if(!removed) return res.status(404).json({ error: "Recipe not found" });
   res.json({ ok: true });
+}));
+
+// --- smart add ------------------------------------------------------------
+
+// Parse only: the result goes back to the browser for review before saving.
+app.post("/api/parse", wrap(async (req, res) => {
+  if(!llmConfigured()) return res.status(503).json({ error: "No text model is configured." });
+  const parsed = await parseRecipeText((req.body || {}).text);
+  res.json({ ok: true, recipe: parsed });
 }));
 
 // --- bulk import / export --------------------------------------------------
