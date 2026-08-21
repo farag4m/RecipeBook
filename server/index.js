@@ -219,7 +219,10 @@ app.get("/api/images/:id", wrap(async (req, res) => {
   // One panel at a time. Art drawn as a wide strip is cropped down to the
   // requested panel so it can fill a narrow screen instead of shrinking.
   // plain=1 drops the lettering, for thumbnails where a speech bubble is noise.
-  const panel = Number.parseInt(req.query.panel, 10);
+  // Art drawn one image per step carries a single caption, and must letter as
+  // a panel (speech bubble) rather than as a whole strip (narration boxes).
+  const requested = Number.parseInt(req.query.panel, 10);
+  const panel = Number.isInteger(requested) ? requested : (captions.length === 1 ? 0 : NaN);
   const plain = req.query.plain === "1";
   if(Number.isInteger(panel) && captions.length){
     return res.send(composePanelSvg({

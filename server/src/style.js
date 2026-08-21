@@ -1,7 +1,7 @@
 // House art style for The Family Recipe Box.
-// Derived from the existing hand-made step art (warm cream ground, soft
-// watercolour wash over clean ink linework, hands only, orange action marks).
-// Every generated comic panel must read as part of that same set.
+// Bright, flat-shaded webtoon art with hard ink outlines - the look of the
+// manhwa reference, kept deliberately light and high-contrast because the
+// model drifts towards dark semi-photographic renders otherwise.
 
 export const STYLE_NAME = "family-recipe-box/manhwa-webtoon/v2";
 
@@ -17,20 +17,16 @@ export const PALETTE = {
 };
 
 // Positive style contract - appended to every generated scene.
-// Modelled on webtoon/manhwa art: glossy full-colour digital painting with
-// crisp linework and cel shading, not the softer watercolour look this
-// started with.
 const STYLE_BASE = [
-  "glossy full-colour digital webtoon illustration in polished Korean manhwa style",
-  "clean crisp black ink linework with confident varied line weight",
-  "cel shading with smooth airbrushed gradients and soft ambient occlusion",
-  "vivid saturated colour, warm kitchen lighting with bright specular highlights",
-  "subtle rim light on edges, gentle bloom, glossy sheen on metal and liquid",
-  "high detail and sharp focus, clean uncluttered background with soft depth of field",
-  "dynamic close-up composition, slight cinematic angle"
+  "clean bright webtoon illustration in polished Korean manhwa style",
+  "crisp confident black ink outlines on every shape, strong readable silhouettes",
+  "flat cel shading in two or three tones, vivid saturated colour",
+  "bright even daylight, light airy background, high contrast, no gloom",
+  "clear and legible at a glance, simple uncluttered composition",
+  "drawn illustration, not a photograph"
 ].join(", ");
 
-// Panels are shot over a cook's hands; covers are not.
+// Panels are shot over a cook's hands; a plated cover is not.
 export const STYLE_POSITIVE = STYLE_BASE + ", hands only - no faces, no characters, no people in frame";
 export const STYLE_COVER = STYLE_BASE;
 
@@ -39,8 +35,10 @@ export const STYLE_NEGATIVE = [
   "no text", "no letters", "no numbers", "no captions", "no speech bubbles",
   "no logos", "no watermark", "no signature", "no panel borders", "no grid",
   "no faces", "no people", "no characters",
-  "no watercolour", "no sketchy pencil", "no muted washed-out colour",
-  "no photorealism", "no 3d render", "no blurry low detail"
+  "no photorealism", "no photograph", "no 3d render", "no cgi",
+  "no dark scene", "no dim lighting", "no heavy shadows", "no murky colour",
+  "no muddy brown wash", "no motion blur", "no depth of field blur",
+  "no grain", "no noise", "no cluttered background"
 ].join(", ");
 
 // Comic page framing - how the panels sit together on the strip.
