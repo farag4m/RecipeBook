@@ -56,15 +56,21 @@
   .tab .count{opacity:.75;margin-left:3px;}
   .tab-icon{font-size:20px;vertical-align:middle;}
   .main{flex:1;min-width:0;max-width:100%;}
-  .search-row{display:grid;grid-template-columns:1fr auto;gap:12px;margin-bottom:18px;}
+  .search-row{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:18px;}
   .search{width:100%;padding:11px 14px;border:3px solid var(--ink);border-radius:8px;font-family:'Comic Neue';font-weight:700;font-size:14px;background:var(--paper-raised);box-shadow:var(--shadow-sm);}
   .search:focus{outline:none;border-color:var(--sage);}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(230px,1fr));gap:22px;}
-  .card{background:var(--paper-raised);border:3px solid var(--ink);border-radius:10px;box-shadow:var(--shadow);padding:20px 16px 16px;position:relative;cursor:pointer;display:flex;flex-direction:column;min-height:155px;transition:transform .12s ease, box-shadow .12s ease;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(240px,1fr));gap:22px;}
+  .card{background:var(--paper-raised);border:4px solid var(--ink);border-radius:14px;box-shadow:var(--shadow);padding:0;overflow:hidden;position:relative;cursor:pointer;display:flex;flex-direction:column;transition:transform .12s ease, box-shadow .12s ease;}
   .card:hover{transform:translate(-3px,-3px) rotate(-0.6deg);box-shadow:7px 7px 0 var(--ink);}
-  .card-icon{font-size:44px;line-height:1;margin-bottom:8px;transform:rotate(-3deg);}
-  .card h3{font-family:'Bangers', cursive;font-weight:400;font-size:22px;margin:0;line-height:1.15;letter-spacing:.02em;}
-  .card .meta{margin-top:auto;padding-top:12px;font-size:12px;color:var(--ink-soft);display:flex;justify-content:space-between;gap:8px;}
+  .card-cover{position:relative;aspect-ratio:4/3;overflow:hidden;border-bottom:4px solid var(--ink);background:var(--cover-a);}
+  .card-cover img{width:100%;height:100%;object-fit:cover;display:block;}
+  /* No art yet: a tinted ground with the category mark, still looks deliberate. */
+  .card-cover.blank{background:linear-gradient(140deg,var(--cover-a),var(--cover-b));display:flex;align-items:center;justify-content:center;}
+  .card-cover.blank span{font-size:64px;line-height:1;transform:rotate(-6deg);filter:drop-shadow(3px 3px 0 rgba(23,21,18,.25));}
+  .card-cat{position:absolute;top:10px;left:10px;font-family:'Bangers';font-size:12px;letter-spacing:.05em;text-transform:uppercase;background:var(--paper-raised);border:2.5px solid var(--ink);border-radius:20px;padding:2px 10px;box-shadow:2px 2px 0 var(--ink);}
+  .card-body{padding:14px 14px 12px;display:flex;flex-direction:column;flex:1;}
+  .card h3{font-family:'Bangers', cursive;font-weight:400;font-size:23px;margin:0;line-height:1.12;letter-spacing:.02em;}
+  .card .meta{margin-top:auto;padding-top:10px;font-size:12px;color:var(--ink-soft);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;}
   .empty{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--ink-soft);}
   .empty b{display:block;font-family:'Bangers';font-weight:400;font-size:30px;color:var(--rule-red);margin-bottom:8px;letter-spacing:.03em;}
   .overlay{position:fixed;inset:0;background:rgba(23,21,18,0.6);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50;}
@@ -150,11 +156,6 @@
     </div>
     <div class="header-actions">
       <button class="btn-ai" id="btnFormat">✨ Smart Add</button>
-      <button class="btn-ghost" id="btnJsonFormat">JSON Format</button>
-      <button class="btn-ghost" id="btnAddJson">Add JSON</button>
-      <button class="btn-ghost" id="btnImport">Import</button>
-      <button class="btn-ghost" id="btnSync">Sync</button>
-      <button class="btn-ghost" id="btnSettings">Service</button>
       <button class="btn-primary" id="btnAdd">+ Add Recipe</button>
     </div>
   </div>
@@ -164,7 +165,7 @@
     <main class="main">
       <div class="search-row">
         <input class="search" id="search" type="text" placeholder="Search recipes by name...">
-        <button class="btn-ghost" id="btnExport">Export View</button>
+        
       </div>
       <div class="grid" id="grid"></div>
     </main>
@@ -174,6 +175,12 @@
 <script>
 const CATEGORIES = ["Breakfast","Mains","Sides","Desserts","Drinks","Snacks","Other"];
 const CAT_ICON = {Breakfast:"🍳",Mains:"🍝",Sides:"🥗",Desserts:"🍰",Drinks:"🥤",Snacks:"🍿",Other:"⭐"};
+// Cover tints, used behind the category mark when a recipe has no art yet.
+const CAT_TINT = {
+  Breakfast:["#FFD98A","#F6B24A"], Mains:["#F5A97F","#E2705A"], Sides:["#BFD9A3","#8FB574"],
+  Desserts:["#F7B8CE","#E58AAE"], Drinks:["#A9D5E8","#6FAECF"], Snacks:["#FFE08A","#F2C14E"],
+  Other:["#E4D5BC","#C9B392"]
+};
 const API_KEY_STORE = "family-recipe-box:api";
 const POLL_MS = 30000;
 
@@ -300,13 +307,21 @@ function render(){
     return;
   }
 
-  grid.innerHTML = filtered.map(r => `
-    <div class="card" data-id="${escapeHtml(r.id)}">
-      <div class="card-icon">${CAT_ICON[r.category] || "⭐"}</div>
-      <h3>${escapeHtml(r.title)}</h3>
-      <div class="meta"><span>${r.servings ? "🍽️ " + escapeHtml(r.servings) : ""}</span><span>${r.contributor ? "👤 " + escapeHtml(r.contributor) : ""}</span></div>
-    </div>
-  `).join("");
+  grid.innerHTML = filtered.map(r => {
+    const tint = CAT_TINT[r.category] || CAT_TINT.Other;
+    const cover = coverUrl(r);
+    return `
+    <div class="card" data-id="${escapeHtml(r.id)}" style="--cover-a:${tint[0]};--cover-b:${tint[1]}">
+      ${cover
+        ? `<div class="card-cover"><img src="${escapeHtml(cover)}" alt="${escapeHtml(r.title)}" loading="lazy"></div>`
+        : `<div class="card-cover blank"><span>${CAT_ICON[r.category] || "⭐"}</span></div>`}
+      <div class="card-cat">${escapeHtml(r.category)}</div>
+      <div class="card-body">
+        <h3>${escapeHtml(r.title)}</h3>
+        <div class="meta"><span>${r.servings ? "🍽️ " + escapeHtml(r.servings) : ""}</span><span>${r.contributor ? "👤 " + escapeHtml(r.contributor) : ""}</span></div>
+      </div>
+    </div>`;
+  }).join("");
   grid.querySelectorAll(".card").forEach(c => c.onclick = () => openView(c.dataset.id));
 }
 
@@ -318,6 +333,19 @@ function plainStepRow(recipe, idx){
 
 // Comics cover consecutive runs of steps. Each strip is drawn with its panel
 // captions underneath; any step no comic covers falls back to a plain row.
+// A recipe's own first panel makes the card cover; the lettering is dropped
+// so the thumbnail reads as a picture rather than a speech bubble.
+function coverUrl(recipe){
+  const comic = (recipe.comics || [])[0];
+  if(!comic) return null;
+  const panel = (comic.panels || [])[0];
+  if(panel && panel.url) return `${apiUrl(panel.url)}?plain=1`;
+  const base = comic.url || "";
+  if(!base) return null;
+  const abs = /^https?:/i.test(base) ? base : apiUrl(base);
+  return `${abs}${abs.includes("?") ? "&" : "?"}panel=0&plain=1`;
+}
+
 function panelUrl(comic, panelIdx){
   // Newer art is drawn one image per step; older strips are cropped to the
   // requested panel on the way out.
@@ -654,172 +682,7 @@ function openSmartAdd(){
   };
 }
 
-function recipeFormatExample(){
-  return {
-    title:"Mujadara",
-    category:"Mains",
-    servings:"4",
-    contributor:"Aunt Rosa",
-    ingredients:[
-      {text:"1 cup brown or green lentils", step:{title:"Rinse lentils", text:"Rinse lentils, then boil for 15 minutes until just tender."}},
-      {text:"1 cup basmati rice", step:{title:"Wash rice", text:"Rinse rice until the water runs clear."}},
-      {text:"3 large onions, thinly sliced", step:{title:"Saute onions", text:"Cook onions in olive oil until deep golden brown."}}
-    ],
-    steps:[{title:"Serve", text:"Fluff everything together and serve warm."}],
-    notes:"Ingredient steps display in ingredient order. Comics are drawn on save - leave them out of the JSON."
-  };
-}
-
-function openRecipeJsonFormat(){
-  const overlay = document.createElement("div");
-  overlay.className = "overlay";
-  const example = JSON.stringify(recipeFormatExample(), null, 2);
-  overlay.innerHTML = `
-    <div class="modal wide">
-      <button class="modal-close">&times;</button>
-      <h2>Recipe JSON Format</h2>
-      <div class="rule"></div>
-      <textarea id="json-format-output" rows="18" readonly>${escapeHtml(example)}</textarea>
-      <div class="modal-actions">
-        <button class="btn-primary" id="copyJsonFormat">Copy Format</button>
-        <button class="btn-ghost" id="addJsonFromFormat">Add JSON</button>
-      </div>
-      <div id="json-format-status"></div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
-  overlay.querySelector("#copyJsonFormat").onclick = async () => {
-    await navigator.clipboard.writeText(example);
-    overlay.querySelector("#json-format-status").innerHTML = `<div class="status-line">Format copied.</div>`;
-  };
-  overlay.querySelector("#addJsonFromFormat").onclick = () => { overlay.remove(); openImport(example); };
-}
-
-function cleanJsonInput(raw){
-  let text = String(raw || "").trim();
-  if(text.startsWith("```")) text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  return text;
-}
-
-function parseRecipeJson(raw){
-  const text = cleanJsonInput(raw);
-  if(!text) throw new Error("Paste recipe JSON first.");
-  return JSON.parse(text);
-}
-
-function openImport(prefill = ""){
-  const overlay = document.createElement("div");
-  overlay.className = "overlay";
-  overlay.innerHTML = `
-    <div class="modal wide">
-      <button class="modal-close">&times;</button>
-      <h2>Add Recipe JSON</h2>
-      <div class="rule"></div>
-      <div class="tool-box">
-        <label style="margin-top:0">Paste recipe JSON</label>
-        <textarea id="import-input" rows="12" placeholder='Paste one recipe, {"recipe": ...}, or {"recipes": [...]} here.'>${escapeHtml(prefill)}</textarea>
-        <div class="confirm-row" style="margin-top:12px;">
-          <input type="checkbox" id="import-comics" checked style="width:auto;">
-          <label for="import-comics" style="margin:0;">Draw comic strips for each imported recipe</label>
-        </div>
-        <div class="modal-actions">
-          <button class="btn-primary" id="import-run">Import</button>
-          <button class="btn-ghost" id="import-file">Choose File</button>
-          <input type="file" id="file-input" accept="application/json,.json" hidden>
-        </div>
-        <div id="import-status"></div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  const input = overlay.querySelector("#import-input");
-  const fileInput = overlay.querySelector("#file-input");
-  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
-  overlay.querySelector("#import-file").onclick = () => fileInput.click();
-  fileInput.onchange = () => {
-    const file = fileInput.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = () => { input.value = reader.result; };
-    reader.readAsText(file);
-  };
-  overlay.querySelector("#import-run").onclick = async () => {
-    const importBtn = overlay.querySelector("#import-run");
-    const status = overlay.querySelector("#import-status");
-    try{
-      importBtn.disabled = true;
-      const parsed = parseRecipeJson(input.value);
-      const generateComics = overlay.querySelector("#import-comics").checked;
-      status.innerHTML = `<div class="status-line">Importing${generateComics ? " and drawing comics" : ""}... this can take a few minutes.</div>`;
-      const payload = Array.isArray(parsed) ? {recipes:parsed, generateComics}
-        : parsed.recipes ? {recipes:parsed.recipes, generateComics}
-        : parsed.recipe ? {recipes:[parsed.recipe], generateComics}
-        : {recipes:[parsed], generateComics};
-      const result = await api("/api/import", {method:"POST", body:JSON.stringify(payload)});
-      await loadRecipes(true);
-      overlay.remove();
-      showToast(`Imported ${result.imported} recipe${result.imported === 1 ? "" : "s"}`);
-    }catch(e){
-      importBtn.disabled = false;
-      status.innerHTML = `<div class="error-msg">Could not import: ${escapeHtml(e.message)}</div>`;
-    }
-  };
-}
-
 // --- settings --------------------------------------------------------------
-
-function openServiceSettings(){
-  const overlay = document.createElement("div");
-  overlay.className = "overlay";
-  overlay.innerHTML = `
-    <div class="modal wide">
-      <button class="modal-close">&times;</button>
-      <h2>Recipe Service</h2>
-      <div class="rule"></div>
-      <div class="tool-box">
-        <div class="status-line">Recipes and comic art are stored on the server. No sign-in needed.</div>
-        <label>Service URL</label>
-        <input type="text" id="api-url" value="${escapeHtml(localStorage.getItem(API_KEY_STORE) || "")}" placeholder="${escapeHtml(apiBase())}">
-        <div class="hint">Leave blank to use this site's own origin.</div>
-        <div class="modal-actions">
-          <button class="btn-primary" id="api-save">Save URL</button>
-          <button class="btn-ai" id="api-test">Test Service</button>
-        </div>
-        <div id="api-status"></div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  const urlInput = overlay.querySelector("#api-url");
-  const status = overlay.querySelector("#api-status");
-  function store(){
-    const value = urlInput.value.trim().replace(/\/+$/, "");
-    if(value) localStorage.setItem(API_KEY_STORE, value);
-    else localStorage.removeItem(API_KEY_STORE);
-  }
-  overlay.querySelector(".modal-close").onclick = () => overlay.remove();
-  overlay.querySelector("#api-save").onclick = () => { store(); showToast("Service URL saved"); loadRecipes(true); };
-  overlay.querySelector("#api-test").onclick = async () => {
-    store();
-    status.innerHTML = `<div class="status-line">Contacting ${escapeHtml(apiBase())}...</div>`;
-    try{
-      const health = await api("/api/health");
-      const db = health.database || {};
-      status.innerHTML = `<div class="status-line">
-        Service up.<br>
-        Recipes stored: ${db.recipes ?? "?"} | comic images: ${db.images ?? "?"}<br>
-        Comics: ${health.llm?.configured ? escapeHtml(health.llm.model) + " + " + escapeHtml(health.image.active) : "not configured"}
-      </div>`;
-    }catch(e){
-      status.innerHTML = `<div class="error-msg">Service unreachable: ${escapeHtml(e.message)}. A free service sleeps when idle - try again in a minute.</div>`;
-    }
-  };
-}
-
-function exportBox(){
-  window.open(apiUrl("/api/export"), "_blank");
-}
 
 function openSharedRecipeFromHash(){
   const match = /#recipe=([^&]+)/.exec(location.hash);
@@ -849,12 +712,6 @@ document.addEventListener("keydown", e => {
 document.getElementById("search").addEventListener("input", e => { searchTerm = e.target.value; render(); });
 document.getElementById("btnAdd").onclick = () => openForm(null);
 document.getElementById("btnFormat").onclick = openSmartAdd;
-document.getElementById("btnJsonFormat").onclick = openRecipeJsonFormat;
-document.getElementById("btnAddJson").onclick = () => openImport();
-document.getElementById("btnImport").onclick = () => openImport();
-document.getElementById("btnSync").onclick = () => loadRecipes(false);
-document.getElementById("btnSettings").onclick = openServiceSettings;
-document.getElementById("btnExport").onclick = exportBox;
 
 loadRecipes();
 openSharedRecipeFromHash();

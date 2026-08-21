@@ -190,12 +190,14 @@ app.get("/api/images/:id", wrap(async (req, res) => {
 
   // One panel at a time. Art drawn as a wide strip is cropped down to the
   // requested panel so it can fill a narrow screen instead of shrinking.
+  // plain=1 drops the lettering, for thumbnails where a speech bubble is noise.
   const panel = Number.parseInt(req.query.panel, 10);
+  const plain = req.query.plain === "1";
   if(Number.isInteger(panel) && captions.length){
     return res.send(composePanelSvg({
       bytes: image.bytes,
       mime: image.mime,
-      caption: captions[Math.min(Math.max(0, panel), captions.length - 1)],
+      caption: plain ? null : captions[Math.min(Math.max(0, panel), captions.length - 1)],
       panelIndex: panel,
       panelCount: captions.length
     }));
