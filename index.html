@@ -70,8 +70,11 @@
   .overlay{position:fixed;inset:0;background:rgba(23,21,18,0.6);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50;}
   .modal{background:var(--paper-raised);width:100%;max-width:560px;overflow-x:hidden;max-height:86vh;overflow-y:auto;border-radius:12px;border:4px solid var(--ink);box-shadow:8px 8px 0 var(--ink);padding:26px 28px 24px;position:relative;}
   .modal.wide{max-width:720px;}
-  .modal-close{position:absolute;top:12px;right:14px;background:var(--rule-red);color:#fff;border:2.5px solid var(--ink);border-radius:50%;width:30px;height:30px;font-size:18px;line-height:1;padding:0;box-shadow:2px 2px 0 var(--ink);}
-  .modal h2{font-family:'Bangers', cursive;font-weight:400;font-size:32px;margin:0 0 6px;padding-right:20px;letter-spacing:.02em;}
+  /* The modal is the scroll container, so an absolutely positioned close
+     button scrolls out of reach. Sticky keeps it pinned while you read. */
+  .modal-close{position:sticky;top:0;float:right;z-index:30;background:var(--rule-red);color:#fff;border:3px solid var(--ink);border-radius:50%;width:40px;height:40px;font-size:22px;line-height:1;padding:0;margin:-10px -10px 0 10px;box-shadow:2px 2px 0 var(--ink);flex-shrink:0;}
+  .modal-close:hover{transform:none;box-shadow:3px 3px 0 var(--ink);}
+  .modal h2{font-family:'Bangers', cursive;font-weight:400;font-size:32px;margin:0 0 6px;padding-right:8px;clear:none;letter-spacing:.02em;}
   .modal .rule{height:4px;background:var(--rule-red);margin:14px 0;border-radius:2px;}
   .modal .field-label{font-family:'Bangers', cursive;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--sage-deep);margin:16px 0 8px;}
   .modal-icon{font-size:56px;line-height:1;transform:rotate(-3deg);}
@@ -829,6 +832,19 @@ function openSharedRecipeFromHash(){
   };
   setTimeout(tryOpen, 400);
 }
+
+// Escape closes whatever is on top. The form guards against losing a
+// half-typed recipe to a stray keypress.
+document.addEventListener("keydown", e => {
+  if(e.key !== "Escape") return;
+  const overlays = document.querySelectorAll(".overlay");
+  const top = overlays[overlays.length - 1];
+  if(!top) return;
+  const dirty = Array.from(top.querySelectorAll("input[type=text], textarea"))
+    .some(field => field.value.trim());
+  if(dirty && !confirm("Close without saving?")) return;
+  top.remove();
+});
 
 document.getElementById("search").addEventListener("input", e => { searchTerm = e.target.value; render(); });
 document.getElementById("btnAdd").onclick = () => openForm(null);
