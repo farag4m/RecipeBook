@@ -278,7 +278,13 @@ async function persistWithComics(recipe, wantComics){
 
   try{
     const drawn = await drawComics(recipe);
-    if(!drawn.comics.length) return { recipe: saved, plan: drawn.plan };
+    // Panel failures are collected rather than thrown, so an empty result is
+    // the normal shape of "nothing could be drawn" - queue it.
+    if(!drawn.comics.length){
+      await db.enqueueArt(recipe.id, "no panels could be drawn");
+      saved = await db.upsertRecipe({ ...recipe, artPending: true });
+      return { recipe: saved, plan: { ...(drawn.plan || {}), queued: true } };
+    }
     // Condensing may have rewritten the step list; keep what was drawn.
     recipe.steps = drawn.steps.map(step => step.text);
     recipe.stepTitles = drawn.steps.map(step => step.title || step.text);
@@ -411,7 +417,7 @@ async function drainArtQueue(){
     console.log(`[art-queue] drawing ${recipe.title} (attempt ${job.attempts})`);
     try{
       const drawn = await drawComics(recipe);
-      if(!drawn.comics.length) throw new Error("no panels were drawn");
+      if(!drawn.comics.length) throw new Error("no panels could be drawn");
       recipe.steps = drawn.steps.map(step => step.text);
       recipe.stepTitles = drawn.steps.map(step => step.title || step.text);
       recipe.comics = drawn.comics;
