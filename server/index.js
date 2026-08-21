@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { MAX_STEPS, PANELS_PER_CHUNK, MAX_CHUNKS, normalizeSteps, planChunks } from "./src/chunk.js";
 import { condenseSteps, authorPanels, llmConfigured, llmStatus, LLM_MODEL } from "./src/llm.js";
 import { buildPanelPrompt, buildCoverPrompt, seedFor, STYLE_NAME } from "./src/style.js";
-import { renderStrip, providerStatus } from "./src/image/index.js";
+import { renderStrip, providerStatus, providersReady } from "./src/image/index.js";
 import { normalizeRecipe, newId, slugify, CATEGORIES } from "./src/recipe.js";
 import { composeComicSvg, composePanelSvg } from "./src/comic/compose.js";
 import { parseRecipeText } from "./src/parse.js";
@@ -47,6 +47,7 @@ app.get("/api/health", wrap(async (req, res) => {
   if(db.dbConfigured()){
     try{
       database = { configured: true, ok: true, ...(await db.stats()) };
+      database.artQueue = await db.artQueueDepth();
     }catch(e){
       database = { configured: true, ok: false, error: e.message };
     }
@@ -267,6 +268,14 @@ async function persistWithComics(recipe, wantComics){
   let saved = await db.upsertRecipe(recipe);
   if(!wantComics || !recipe.steps.length) return { recipe: saved, plan: null };
 
+  // Every image provider is out of allowance: queue the art rather than
+  // saving a placeholder the author never asked for.
+  if(!providersReady()){
+    await db.enqueueArt(recipe.id, "image allowance spent at save time");
+    saved = await db.upsertRecipe({ ...recipe, artPending: true });
+    return { recipe: saved, plan: { queued: true, reason: "image allowance spent" } };
+  }
+
   try{
     const drawn = await drawComics(recipe);
     if(!drawn.comics.length) return { recipe: saved, plan: drawn.plan };
@@ -275,12 +284,17 @@ async function persistWithComics(recipe, wantComics){
     recipe.stepTitles = drawn.steps.map(step => step.title || step.text);
     recipe.comics = drawn.comics;
     if(drawn.cover) recipe.cover = drawn.cover;
+    recipe.artPending = false;
     saved = await db.upsertRecipe(recipe);
+    await db.finishArtJob(recipe.id);
     return { recipe: saved, plan: drawn.plan };
   }catch(e){
-    // Art is a bonus, never a gate on saving the recipe.
+    // Art is a bonus, never a gate on saving the recipe - but it should not
+    // be lost either, so a failure joins the queue.
     console.error("[comics]", e.message);
-    return { recipe: saved, plan: { error: e.message } };
+    await db.enqueueArt(recipe.id, e.message);
+    saved = await db.upsertRecipe({ ...recipe, artPending: true });
+    return { recipe: saved, plan: { queued: true, error: e.message } };
   }
 }
 
@@ -379,6 +393,41 @@ app.get("*", (req, res, next) => {
   res.sendFile(path.join(SITE_ROOT, "index.html"));
 });
 
+// --- queued art worker -----------------------------------------------------
+
+// Drains the queue whenever a provider has allowance again. Cloudflare's
+// allowance returns at UTC midnight, so a slow poll is plenty.
+const WORKER_MS = Number(process.env.ART_WORKER_MS || 300000);
+
+async function drainArtQueue(){
+  if(!db.dbConfigured() || !llmConfigured()) return;
+  if(!providersReady()) return;
+
+  let job;
+  while((job = await db.claimArtJob())){
+    const recipe = await db.getRecipe(job.recipe_id);
+    if(!recipe){ await db.finishArtJob(job.recipe_id); continue; }
+
+    console.log(`[art-queue] drawing ${recipe.title} (attempt ${job.attempts})`);
+    try{
+      const drawn = await drawComics(recipe);
+      if(!drawn.comics.length) throw new Error("no panels were drawn");
+      recipe.steps = drawn.steps.map(step => step.text);
+      recipe.stepTitles = drawn.steps.map(step => step.title || step.text);
+      recipe.comics = drawn.comics;
+      if(drawn.cover) recipe.cover = drawn.cover;
+      recipe.artPending = false;
+      await db.upsertRecipe(recipe);
+      await db.finishArtJob(recipe.id);
+      console.log(`[art-queue] finished ${recipe.title}`);
+    }catch(e){
+      console.error(`[art-queue] ${recipe.title} failed: ${e.message}`);
+      await db.failArtJob(recipe.id, e.message, providersReady() ? 10 : 60);
+      if(!providersReady()) break;   // allowance went during this job
+    }
+  }
+}
+
 const port = process.env.PORT || 3000;
 
 async function start(){
@@ -392,6 +441,9 @@ async function start(){
   }else{
     console.warn("[recipe-box] DATABASE_URL not set - recipe storage disabled");
   }
+  setInterval(() => drainArtQueue().catch(e => console.error("[art-queue]", e.message)), WORKER_MS);
+  setTimeout(() => drainArtQueue().catch(() => {}), 15000);
+
   app.listen(port, "0.0.0.0", () => {
     console.log(`[recipe-box] listening on ${port}`);
     console.log(`[recipe-box] llm=${llmStatus().providers.join(">") || "off"} image=${providerStatus().active}`);

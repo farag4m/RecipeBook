@@ -29,6 +29,12 @@ export function providerStatus(){
   };
 }
 
+// True when something can actually paint. The svg storyboard is a fallback,
+// not a provider - if it is all that is left, art should queue instead.
+export function providersReady(){
+  return resolveOrder().some(name => name !== "svg");
+}
+
 export function resolveOrder(){
   const choice = (process.env.IMAGE_PROVIDER || "auto").toLowerCase();
   if(choice !== "auto" && PROVIDERS[choice]) return [choice, "svg"];

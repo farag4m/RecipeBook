@@ -57,6 +57,19 @@ export async function initSchema(){
   // Added after the first release; existing installs need the column.
   await query(`ALTER TABLE comic_images ADD COLUMN IF NOT EXISTS captions JSONB NOT NULL DEFAULT '[]'::jsonb`);
   await query(`CREATE INDEX IF NOT EXISTS comic_images_recipe_idx ON comic_images (recipe_id)`);
+
+  // Art that could not be drawn now - usually the daily image allowance is
+  // spent - waits here instead of being silently dropped.
+  await query(`
+    CREATE TABLE IF NOT EXISTS art_jobs (
+      recipe_id  TEXT PRIMARY KEY REFERENCES recipes(id) ON DELETE CASCADE,
+      status     TEXT NOT NULL DEFAULT 'pending',
+      attempts   INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      run_after  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  await query(`CREATE INDEX IF NOT EXISTS art_jobs_pending_idx ON art_jobs (status, run_after)`);
 }
 
 // --- recipes ---------------------------------------------------------------
@@ -139,4 +152,58 @@ export async function stats(){
     images: rows[0].images,
     imageBytes: Number(rows[0].image_bytes)
   };
+}
+
+
+// --- art queue -------------------------------------------------------------
+
+export async function enqueueArt(recipeId, reason = ""){
+  await query(
+    `INSERT INTO art_jobs (recipe_id, status, last_error, run_after)
+     VALUES ($1, 'pending', $2, now())
+     ON CONFLICT (recipe_id) DO UPDATE
+       SET status = 'pending', last_error = EXCLUDED.last_error, run_after = now()`,
+    [recipeId, reason.slice(0, 400)]
+  );
+}
+
+// Claims one job so two workers cannot pick up the same recipe.
+export async function claimArtJob(){
+  const { rows } = await query(
+    `UPDATE art_jobs SET status = 'running', attempts = attempts + 1
+      WHERE recipe_id = (
+        SELECT recipe_id FROM art_jobs
+         WHERE status = 'pending' AND run_after <= now()
+         ORDER BY created_at
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED)
+      RETURNING recipe_id, attempts`);
+  return rows[0] || null;
+}
+
+export async function finishArtJob(recipeId){
+  await query(`DELETE FROM art_jobs WHERE recipe_id = $1`, [recipeId]);
+}
+
+// Failed jobs back off rather than spinning against a spent allowance.
+export async function failArtJob(recipeId, error, retryInMinutes = 30){
+  await query(
+    `UPDATE art_jobs
+        SET status = 'pending', last_error = $2,
+            run_after = now() + ($3 || ' minutes')::interval
+      WHERE recipe_id = $1`,
+    [recipeId, String(error).slice(0, 400), String(retryInMinutes)]);
+}
+
+export async function queuedRecipeIds(){
+  const { rows } = await query(`SELECT recipe_id FROM art_jobs`);
+  return rows.map(r => r.recipe_id);
+}
+
+export async function artQueueDepth(){
+  const { rows } = await query(
+    `SELECT count(*)::int total,
+            count(*) FILTER (WHERE status = 'pending')::int pending
+       FROM art_jobs`);
+  return rows[0];
 }

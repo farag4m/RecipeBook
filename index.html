@@ -76,6 +76,7 @@
   /* No art yet: a tinted ground with the category mark, still looks deliberate. */
   .card-cover.blank{background:linear-gradient(140deg,var(--cover-a),var(--cover-b));display:flex;align-items:center;justify-content:center;}
   .card-cover.blank span{font-size:64px;line-height:1;transform:rotate(-6deg);filter:drop-shadow(3px 3px 0 rgba(23,21,18,.25));}
+  .card-pending{position:absolute;top:10px;right:10px;font-family:'Comic Neue';font-weight:700;font-size:10.5px;background:var(--butter);border:2.5px solid var(--ink);border-radius:20px;padding:2px 8px;box-shadow:2px 2px 0 var(--ink);}
   .card-cat{position:absolute;top:10px;left:10px;font-family:'Bangers';font-size:12px;letter-spacing:.05em;text-transform:uppercase;background:var(--paper-raised);border:2.5px solid var(--ink);border-radius:20px;padding:2px 10px;box-shadow:2px 2px 0 var(--ink);}
   .card-body{padding:14px 14px 12px;display:flex;flex-direction:column;flex:1;}
   .card h3{font-family:'Bangers', cursive;font-weight:400;font-size:23px;margin:0;line-height:1.12;letter-spacing:.02em;}
@@ -323,6 +324,7 @@ function render(){
         ? `<div class="card-cover"><img src="${escapeHtml(cover)}" alt="${escapeHtml(r.title)}" loading="lazy"></div>`
         : `<div class="card-cover blank"><span>${CAT_ICON[r.category] || "⭐"}</span></div>`}
       <div class="card-cat">${escapeHtml(r.category)}</div>
+      ${r.artPending ? `<div class="card-pending">🎨 comic on the way</div>` : ""}
       <div class="card-body">
         <h3>${escapeHtml(r.title)}</h3>
         <div class="meta"><span>${r.servings ? "🍽️ " + escapeHtml(r.servings) : ""}</span><span>${r.contributor ? "👤 " + escapeHtml(r.contributor) : ""}</span></div>
@@ -425,6 +427,33 @@ function renderStepDisplay(recipe){
     </details>`;
 
   return `<div class="comic-book">${blocks.join("")}</div>${fullText}`;
+}
+
+// The daily image allowance is spent, so the art will be drawn later. Say so
+// plainly rather than leaving the author wondering where the comic went.
+function notifyQueued(title){
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="modal">
+      <button class="modal-close">&times;</button>
+      <h2>Comics queued</h2>
+      <div class="rule"></div>
+      <div class="notes">
+        <b>${escapeHtml(title)}</b> is saved and ready to cook from.<br><br>
+        The daily free allowance for drawing has run out, so its comic is in the
+        queue. It will be drawn automatically once the allowance resets, and the
+        recipe will update on its own - nothing more for you to do.
+      </div>
+      <div class="modal-actions">
+        <button class="btn-primary" id="queued-ok">Got it</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.querySelector("#queued-ok").onclick = close;
+  overlay.onclick = e => { if(e.target === overlay) close(); };
 }
 
 function showToast(msg){
@@ -604,11 +633,17 @@ function openForm(existing, prefill){
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving...";
       statusEl.innerHTML = `<div class="status-line">${generateComics ? "Saving and drawing comics... this takes up to a minute." : "Saving..."}</div>`;
-      if(existing) await api(`/api/recipes/${encodeURIComponent(existing.id)}`, {method:"PUT", body:JSON.stringify(payload)});
-      else await api("/api/recipes", {method:"POST", body:JSON.stringify(payload)});
+      const result = existing
+        ? await api(`/api/recipes/${encodeURIComponent(existing.id)}`, {method:"PUT", body:JSON.stringify(payload)})
+        : await api("/api/recipes", {method:"POST", body:JSON.stringify(payload)});
       await loadRecipes(true);
       overlay.remove();
-      showToast(`Saved "${title}"`);
+      if(result.plan && result.plan.queued){
+        showToast(`Saved "${title}" - comics queued`);
+        notifyQueued(title);
+      }else{
+        showToast(`Saved "${title}"`);
+      }
     }catch(e){
       saveBtn.disabled = false;
       saveBtn.textContent = "Save Recipe";

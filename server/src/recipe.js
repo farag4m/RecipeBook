@@ -75,7 +75,8 @@ export function normalizeRecipe(raw, existing = null){
     stepTitles: steps.map(step => step.title || step.text),
     notes: text(raw.notes),
     comics: Array.isArray(raw.comics) ? raw.comics : (existing?.comics || []),
-    cover: raw.cover || existing?.cover || null
+    cover: raw.cover || existing?.cover || null,
+    artPending: raw.artPending === true
   };
 }
 
