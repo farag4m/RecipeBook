@@ -24,22 +24,24 @@ export function providerStatus(){
     gemini: gemini.available(),
     openai: openai.available(),
     pollinations: pollinations.available(),
-    svg: true,
-    active: resolveOrder()[0]
+    svg: "manual only",
+    active: resolveOrder()[0] || null
   };
 }
 
-// True when something can actually paint. The svg storyboard is a fallback,
-// not a provider - if it is all that is left, art should queue instead.
+// True when something can actually paint. With nothing available the caller
+// queues the work rather than inventing a placeholder.
 export function providersReady(){
-  return resolveOrder().some(name => name !== "svg");
+  return resolveOrder().length > 0;
 }
 
 export function resolveOrder(){
   const choice = (process.env.IMAGE_PROVIDER || "auto").toLowerCase();
-  if(choice !== "auto" && PROVIDERS[choice]) return [choice, "svg"];
-  const order = AUTO_ORDER.filter(name => PROVIDERS[name].available?.() ?? true);
-  return [...order, "svg"];
+  if(choice !== "auto" && PROVIDERS[choice]) return [choice];
+  // The svg storyboard is never chosen automatically. A placeholder nobody
+  // asked for is worse than waiting, so when every provider is out of
+  // allowance the work is queued and drawn after the reset instead.
+  return AUTO_ORDER.filter(name => PROVIDERS[name].available?.() ?? true);
 }
 
 // Tries each provider in turn; returns the first image plus any failures.
