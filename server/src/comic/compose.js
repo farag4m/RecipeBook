@@ -15,6 +15,32 @@ const FALLBACK = { width: 1024, height: 1024 };
 const FONT_RATIO = 0.038;
 const MIN_FONT_RATIO = 0.024;
 
+
+// Manhwa lettering: bold all-caps sans in a white bubble with a pointed tail,
+// rather than a serif narration box. Matches how webtoon dialogue reads.
+const BUBBLE_FONT = "'Trebuchet MS', 'Helvetica Neue', Arial, sans-serif";
+
+function bubblePath(x, y, w, h, r, tailX){
+  const tw = Math.max(14, Math.round(w * 0.055));   // tail half-width
+  const th = Math.max(16, Math.round(h * 0.22));    // tail height
+  const tx = Math.min(Math.max(tailX, x + r + tw * 2), x + w - r - tw * 2);
+  return [
+    `M ${x + r} ${y}`,
+    `H ${tx - tw}`,
+    `L ${tx} ${y - th}`,                              // tail, pointing up
+    `L ${tx + tw} ${y}`,
+    `H ${x + w - r}`,
+    `A ${r} ${r} 0 0 1 ${x + w} ${y + r}`,
+    `V ${y + h - r}`,
+    `A ${r} ${r} 0 0 1 ${x + w - r} ${y + h}`,
+    `H ${x + r}`,
+    `A ${r} ${r} 0 0 1 ${x} ${y + h - r}`,
+    `V ${y + r}`,
+    `A ${r} ${r} 0 0 1 ${x + r} ${y}`,
+    "Z"
+  ].join(" ");
+}
+
 function escapeXml(s){
   return String(s || "").replace(/[&<>"']/g, m =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[m]));
@@ -143,47 +169,45 @@ export function composePanelSvg({ bytes, mime, caption, panelIndex = 0, panelCou
   const originX = index * panelW;
   const dataUri = `data:${mime};base64,${bytes.toString("base64")}`;
 
-  const pad = Math.round(panelW * 0.035);
+  const pad = Math.round(panelW * 0.04);
   const baseFont = Math.max(16, Math.round(panelW * FONT_RATIO));
   const minFont = Math.max(12, Math.round(panelW * MIN_FONT_RATIO));
   const boxW = panelW - pad * 2;
+  const text = String(caption?.text || "").toUpperCase();
 
   let fontSize = baseFont;
-  let lines, lineHeight, badge, textInset, boxH;
+  let lines, lineHeight, boxH;
   for(;;){
-    lineHeight = Math.round(fontSize * 1.34);
-    badge = Math.round(fontSize * 1.55);
-    textInset = pad * 0.85 + badge * 1.05;
-    const textW = boxW - textInset - pad * 0.85;
-    const maxChars = Math.max(12, Math.floor(textW / (fontSize * 0.56)));
-    lines = wrapText(caption?.text, maxChars, 8);
-    boxH = lines.length * lineHeight + pad * 1.5;
+    lineHeight = Math.round(fontSize * 1.3);
+    // All-caps sans runs wider than mixed-case serif.
+    const maxChars = Math.max(10, Math.floor((boxW - fontSize * 1.6) / (fontSize * 0.62)));
+    lines = wrapText(text, maxChars, 8);
+    boxH = lines.length * lineHeight + fontSize * 1.25;
     const clipped = lines.some(line => line.endsWith("…"));
-    if((boxH <= H * 0.42 && !clipped) || fontSize <= minFont) break;
+    if((boxH <= H * 0.40 && !clipped) || fontSize <= minFont) break;
     fontSize -= 1;
   }
 
   const x = Math.round(originX + pad);
   const y = Math.round(H - boxH - pad);
-  const stroke = Math.max(3, Math.round(panelW * 0.006));
+  const stroke = Math.max(3, Math.round(panelW * 0.007));
+  const radius = Math.round(fontSize * 0.9);
+  const badgeR = Math.round(fontSize * 0.85);
 
-  const box = caption?.text ? `
-  <rect x="${x + 4}" y="${y + 4}" width="${Math.round(boxW)}" height="${Math.round(boxH)}"
-        rx="${Math.round(fontSize * 0.45)}" fill="${PALETTE.ink}" fill-opacity="0.8"/>
-  <rect x="${x}" y="${y}" width="${Math.round(boxW)}" height="${Math.round(boxH)}"
-        rx="${Math.round(fontSize * 0.45)}" fill="#FFF8E7"
-        stroke="${PALETTE.ink}" stroke-width="${stroke}"/>
-  <circle cx="${Math.round(x + pad * 0.7 + badge / 2)}" cy="${Math.round(y + pad * 0.75 + badge / 2)}"
-          r="${Math.round(badge / 2)}" fill="${PALETTE.red}"
-          stroke="${PALETTE.ink}" stroke-width="${Math.max(2, Math.round(stroke * 0.7))}"/>
-  <text x="${Math.round(x + pad * 0.7 + badge / 2)}" y="${Math.round(y + pad * 0.75 + badge / 2 + fontSize * 0.37)}"
-        font-family="Georgia, 'Times New Roman', serif" font-size="${Math.round(fontSize * 0.95)}"
-        font-weight="bold" fill="#FFFFFF" text-anchor="middle">${caption.n}</text>
-  ${lines.map((line, li) => `<text x="${Math.round(x + textInset)}" y="${Math.round(y + pad * 0.75 + fontSize + li * lineHeight)}"
-        font-family="Georgia, 'Times New Roman', serif" font-size="${fontSize}"
-        font-weight="bold" fill="${PALETTE.ink}">${escapeXml(line)}</text>`).join("")}` : "";
+  const bubble = text ? `
+  <path d="${bubblePath(x, y, Math.round(boxW), Math.round(boxH), radius, Math.round(originX + panelW * 0.3))}"
+        fill="#FFFFFF" stroke="${PALETTE.ink}" stroke-width="${stroke}" stroke-linejoin="round"/>
+  <circle cx="${Math.round(x + badgeR + stroke)}" cy="${Math.round(y + badgeR + stroke)}" r="${badgeR}"
+          fill="${PALETTE.red}" stroke="${PALETTE.ink}" stroke-width="${Math.max(2, Math.round(stroke * 0.6))}"/>
+  <text x="${Math.round(x + badgeR + stroke)}" y="${Math.round(y + badgeR + stroke + fontSize * 0.34)}"
+        font-family="${BUBBLE_FONT}" font-size="${Math.round(fontSize * 0.85)}" font-weight="bold"
+        fill="#FFFFFF" text-anchor="middle">${caption.n}</text>
+  ${lines.map((line, li) => `<text x="${Math.round(originX + panelW / 2)}" y="${Math.round(y + fontSize * 1.5 + li * lineHeight)}"
+        font-family="${BUBBLE_FONT}" font-size="${fontSize}" font-weight="bold"
+        letter-spacing="${(fontSize * 0.02).toFixed(2)}"
+        fill="${PALETTE.ink}" text-anchor="middle">${escapeXml(line)}</text>`).join("")}` : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${Math.round(panelW)}" height="${H}" viewBox="${Math.round(originX)} 0 ${Math.round(panelW)} ${H}">
-  <image href="${dataUri}" xlink:href="${dataUri}" x="0" y="0" width="${W}" height="${H}"/>${box}
+  <image href="${dataUri}" xlink:href="${dataUri}" x="0" y="0" width="${W}" height="${H}"/>${bubble}
 </svg>`;
 }

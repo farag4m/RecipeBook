@@ -3,12 +3,12 @@
 // watercolour wash over clean ink linework, hands only, orange action marks).
 // Every generated comic panel must read as part of that same set.
 
-export const STYLE_NAME = "family-recipe-box/watercolor-comic/v1";
+export const STYLE_NAME = "family-recipe-box/manhwa-webtoon/v2";
 
 export const PALETTE = {
   paper: "#F6EDDA",
   paperDeep: "#EFE1C8",
-  ink: "#2A2118",
+  ink: "#141414",
   red: "#D8493F",
   butter: "#F2B33D",
   accent: "#E8912A",
@@ -16,24 +16,28 @@ export const PALETTE = {
   wood: "#B0783F"
 };
 
-// Positive style contract - always appended to the generated scene text.
+// Positive style contract - appended to every generated scene.
+// Modelled on webtoon/manhwa art: glossy full-colour digital painting with
+// crisp linework and cel shading, not the softer watercolour look this
+// started with.
 export const STYLE_POSITIVE = [
-  "soft watercolour illustration over clean dark-brown ink linework",
-  "warm cream paper background (#F6EDDA) with subtle paper grain",
-  "muted warm palette: cream, terracotta red, butter yellow, sage green, wood brown",
-  "gentle washes, visible brush texture, no harsh shading, no photorealism",
-  "small orange action marks (three short strokes) near motion or heat",
-  "hands only - no faces, no people, no characters",
-  "one clear centred subject per panel with generous negative space",
-  "cosy home-kitchen cookbook feel, flat even lighting, eye-level view"
+  "glossy full-colour digital webtoon illustration in polished Korean manhwa style",
+  "clean crisp black ink linework with confident varied line weight",
+  "cel shading with smooth airbrushed gradients and soft ambient occlusion",
+  "vivid saturated colour, warm kitchen lighting with bright specular highlights",
+  "subtle rim light on edges, gentle bloom, glossy sheen on metal and liquid",
+  "high detail and sharp focus, clean uncluttered background with soft depth of field",
+  "dynamic close-up composition, slight cinematic angle",
+  "hands only - no faces, no characters, no people in frame"
 ].join(", ");
 
 // Negative contract - things that break the set.
 export const STYLE_NEGATIVE = [
   "no text", "no letters", "no numbers", "no captions", "no speech bubbles",
-  "no logos", "no watermark", "no signature", "no borders drawn inside a panel",
-  "no faces", "no people", "no cartoon characters",
-  "no photorealism", "no 3d render", "no neon", "no dark background"
+  "no logos", "no watermark", "no signature", "no panel borders", "no grid",
+  "no faces", "no people", "no characters",
+  "no watercolour", "no sketchy pencil", "no muted washed-out colour",
+  "no photorealism", "no 3d render", "no blurry low detail"
 ].join(", ");
 
 // Comic page framing - how the panels sit together on the strip.
