@@ -91,11 +91,6 @@
   .comic-strip-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
   .comic-badge{font-family:'Bangers';font-size:14px;letter-spacing:.03em;background:var(--butter);border:2.5px solid var(--ink);border-radius:20px;padding:2px 12px;box-shadow:2px 2px 0 var(--ink);}
   .comic-strip img{display:block;width:100%;border:3px solid var(--ink);border-radius:10px;background:#fff;}
-  .comic-captions{display:grid;gap:8px;margin-top:12px;}
-  .comic-caption{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;line-height:1.45;color:var(--ink);}
-  .comic-caption .step-num{margin-top:1px;}
-  .comic-caption b{font-family:'Bangers';font-weight:400;font-size:15px;letter-spacing:.02em;display:block;}
-  .comic-caption span.txt{color:var(--ink-soft);}
   .gen-steps{display:grid;gap:6px;margin-top:10px;}
   .gen-step{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);font-family:'Comic Neue';letter-spacing:0;text-transform:none;}
   .gen-step .dot{width:11px;height:11px;border-radius:50%;border:2px solid var(--ink);background:var(--paper);flex-shrink:0;}
@@ -324,22 +319,12 @@ function renderStepDisplay(recipe){
       if(!covered.has(idx)){ blocks.push(plainStepRow(recipe, idx)); covered.add(idx); }
     }
 
-    const captions = [];
     for(let idx = from; idx <= to; idx++){
-      if(idx < 0 || idx >= recipe.steps.length) continue;
-      covered.add(idx);
-      const panel = (comic.panels || []).find(p => p.stepIndex === idx);
-      const title = panel?.caption || (recipe.stepTitles && recipe.stepTitles[idx]) || "";
-      captions.push(`
-        <div class="comic-caption">
-          <span class="step-num">${idx + 1}</span>
-          <span>
-            ${title && title !== recipe.steps[idx] ? `<b>${escapeHtml(title)}</b>` : ""}
-            <span class="txt">${escapeHtml(recipe.steps[idx])}</span>
-          </span>
-        </div>`);
+      if(idx >= 0 && idx < recipe.steps.length) covered.add(idx);
     }
 
+    // The step text is lettered onto the art itself, so nothing is repeated
+    // underneath - the strip is the recipe.
     blocks.push(`
       <div class="comic-strip">
         <div class="comic-strip-head">
@@ -347,7 +332,6 @@ function renderStepDisplay(recipe){
           <span class="hint">Steps ${from + 1}${to > from ? "-" + (to + 1) : ""}</span>
         </div>
         <img src="${escapeHtml(imageUrl(comic))}" alt="${escapeHtml(comic.name || "Comic")}" loading="lazy">
-        <div class="comic-captions">${captions.join("")}</div>
       </div>`);
 
     cursor = to + 1;

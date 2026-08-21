@@ -16,6 +16,7 @@ import { condenseSteps, authorPanels, llmConfigured, llmStatus, LLM_MODEL } from
 import { buildImagePrompt, seedFor, STYLE_NAME } from "./src/style.js";
 import { renderStrip, providerStatus } from "./src/image/index.js";
 import { normalizeRecipe, newId, slugify, CATEGORIES } from "./src/recipe.js";
+import { composeComicSvg } from "./src/comic/compose.js";
 import * as db from "./src/db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -111,12 +112,18 @@ async function drawComics(recipe){
     const image = await renderStrip({ prompt, panels, recipeTitle: recipe.title, seed });
 
     const imageId = `${recipe.id}-${chunk.index + 1}`;
+    // The step text becomes the narration lettering drawn over the art.
+    const captions = chunk.steps.map((step, i) => ({
+      n: chunk.startStep + i + 1,
+      text: step.text
+    }));
     await db.putComicImage({
       id: imageId,
       recipeId: recipe.id,
       idx: chunk.index,
       mime: image.mime,
-      base64: image.base64
+      base64: image.base64,
+      captions
     });
 
     return {
@@ -148,6 +155,18 @@ async function drawComics(recipe){
 app.get("/api/images/:id", wrap(async (req, res) => {
   const image = await db.getComicImage(req.params.id);
   if(!image) return res.status(404).json({ error: "Image not found" });
+
+  const captions = Array.isArray(image.captions) ? image.captions : [];
+  const wantsRaw = req.query.raw === "1" || image.mime === "image/svg+xml";
+
+  // Lettering is drawn over the art on the way out, so the stored image stays
+  // clean and the narration can be restyled without redrawing anything.
+  if(!wantsRaw && captions.length){
+    res.set("Content-Type", "image/svg+xml");
+    res.set("Cache-Control", "public, max-age=300");
+    return res.send(composeComicSvg({ bytes: image.bytes, mime: image.mime, captions }));
+  }
+
   res.set("Content-Type", image.mime);
   res.set("Cache-Control", "public, max-age=31536000, immutable");
   res.send(image.bytes);

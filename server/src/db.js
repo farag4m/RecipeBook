@@ -51,8 +51,11 @@ export async function initSchema(){
       idx        INTEGER NOT NULL,
       mime       TEXT NOT NULL,
       bytes      BYTEA NOT NULL,
+      captions   JSONB NOT NULL DEFAULT '[]'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
+  // Added after the first release; existing installs need the column.
+  await query(`ALTER TABLE comic_images ADD COLUMN IF NOT EXISTS captions JSONB NOT NULL DEFAULT '[]'::jsonb`);
   await query(`CREATE INDEX IF NOT EXISTS comic_images_recipe_idx ON comic_images (recipe_id)`);
 }
 
@@ -95,20 +98,30 @@ export async function deleteRecipe(id){
 
 // --- comic images ----------------------------------------------------------
 
-export async function putComicImage({ id, recipeId, idx, mime, base64 }){
+export async function putComicImage({ id, recipeId, idx, mime, base64, captions = [] }){
   await query(
-    `INSERT INTO comic_images (id, recipe_id, idx, mime, bytes)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO comic_images (id, recipe_id, idx, mime, bytes, captions)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (id) DO UPDATE
-       SET mime = EXCLUDED.mime, bytes = EXCLUDED.bytes, created_at = now()`,
-    [id, recipeId, idx, mime, Buffer.from(base64, "base64")]
+       SET mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
+           captions = EXCLUDED.captions, created_at = now()`,
+    [id, recipeId, idx, mime, Buffer.from(base64, "base64"), JSON.stringify(captions)]
   );
   return id;
 }
 
 export async function getComicImage(id){
-  const { rows } = await query(`SELECT mime, bytes FROM comic_images WHERE id = $1`, [id]);
+  const { rows } = await query(
+    `SELECT mime, bytes, captions FROM comic_images WHERE id = $1`, [id]);
   return rows.length ? rows[0] : null;
+}
+
+// Lettering is composed at serve time, so captions can be corrected without
+// redrawing the art.
+export async function setComicCaptions(id, captions){
+  const { rowCount } = await query(
+    `UPDATE comic_images SET captions = $2 WHERE id = $1`, [id, JSON.stringify(captions)]);
+  return rowCount > 0;
 }
 
 export async function deleteComicImages(recipeId){
