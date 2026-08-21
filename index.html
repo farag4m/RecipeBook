@@ -23,6 +23,7 @@
     --shadow-sm:3px 3px 0 var(--ink);
   }
   *{box-sizing:border-box;}
+  html,body{max-width:100%;overflow-x:hidden;}
   body{
     margin:0;
     background:var(--paper);
@@ -32,9 +33,9 @@
     background-image:radial-gradient(circle, rgba(23,21,18,0.14) 1.6px, transparent 1.6px);
     background-size:16px 16px;
   }
-  .app{max-width:1180px;margin:0 auto;padding:28px 20px 80px;}
+  .app{max-width:1180px;margin:0 auto;padding:28px 20px 80px;min-width:0;}
   .header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;border-bottom:5px solid var(--ink);padding-bottom:18px;margin-bottom:26px;}
-  .header h1{font-family:'Bangers', cursive;font-weight:400;font-size:56px;margin:0;letter-spacing:.02em;color:var(--rule-red);text-shadow:3px 3px 0 var(--ink);transform:rotate(-1.5deg);}
+  .header h1{font-family:'Bangers', cursive;font-weight:400;font-size:clamp(30px,8vw,56px);margin:0;letter-spacing:.02em;color:var(--rule-red);text-shadow:3px 3px 0 var(--ink);transform:rotate(-1.5deg);}
   .header .sub{font-size:13px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;margin-top:8px;}
   .err-banner{color:var(--rule-red);text-transform:none;letter-spacing:0;}
   .header-actions{display:flex;gap:10px;flex-wrap:wrap;}
@@ -54,7 +55,7 @@
   .tab.active{background:var(--rule-red);color:#fff;}
   .tab .count{opacity:.75;margin-left:3px;}
   .tab-icon{font-size:20px;vertical-align:middle;}
-  .main{flex:1;min-width:0;}
+  .main{flex:1;min-width:0;max-width:100%;}
   .search-row{display:grid;grid-template-columns:1fr auto;gap:12px;margin-bottom:18px;}
   .search{width:100%;padding:11px 14px;border:3px solid var(--ink);border-radius:8px;font-family:'Comic Neue';font-weight:700;font-size:14px;background:var(--paper-raised);box-shadow:var(--shadow-sm);}
   .search:focus{outline:none;border-color:var(--sage);}
@@ -124,7 +125,7 @@
     .modal{max-height:94vh;}
     .layout{flex-direction:column;}
     .tabs{flex-direction:row;flex-wrap:wrap;position:static;width:100%;min-width:0;}
-    .header h1{font-size:40px;}
+    .header h1{font-size:clamp(28px,8vw,40px);}
     .search-row{grid-template-columns:1fr;}
     .row2{grid-template-columns:1fr;}
     .modal{padding:24px 18px 20px;}
