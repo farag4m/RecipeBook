@@ -13,11 +13,16 @@ export const LLM_MODEL = process.env.OPENROUTER_TEXT_MODEL || "google/gemini-2.5
 // Text generation has the same problem the image side does: any one account
 // can run out of credit. Providers are tried in order until one answers.
 function textProviders(){
-  const list = [];
-  if(process.env.OPENROUTER_API_KEY) list.push({ name: "openrouter", call: viaOpenRouter });
-  if(process.env.GEMINI_API_KEY)     list.push({ name: "gemini",     call: viaGemini });
-  if(process.env.GROQ_API_KEY)       list.push({ name: "groq",       call: viaGroq });
-  return list;
+  const all = {
+    gemini:     { name: "gemini",     call: viaGemini,     key: "GEMINI_API_KEY" },
+    groq:       { name: "groq",       call: viaGroq,       key: "GROQ_API_KEY" },
+    openrouter: { name: "openrouter", call: viaOpenRouter, key: "OPENROUTER_API_KEY" }
+  };
+  // Order is configurable so a provider that runs out of credit can be moved
+  // down without a code change.
+  const order = (process.env.TEXT_PROVIDER_ORDER || "gemini,groq,openrouter")
+    .split(",").map(s => s.trim()).filter(Boolean);
+  return order.map(name => all[name]).filter(p => p && process.env[p.key]);
 }
 
 export function llmConfigured(){
@@ -92,7 +97,7 @@ async function viaGroq(messages, { maxTokens, temperature, timeoutMs }){
 // Gemini's own API takes a different shape: system text is hoisted out of the
 // message list and JSON mode is a generationConfig flag.
 async function viaGemini(messages, { maxTokens, temperature, timeoutMs }){
-  const model = process.env.GEMINI_TEXT_MODEL || "gemini-3.6-flash";
+  const model = process.env.GEMINI_TEXT_MODEL || "gemini-3.5-flash-lite";
   const system = messages.filter(m => m.role === "system").map(m => m.content).join("\n\n");
   const contents = messages
     .filter(m => m.role !== "system")
