@@ -18,6 +18,35 @@ const MIN_FONT_RATIO = 0.024;
 
 // Manhwa lettering: bold all-caps sans in a white bubble with a pointed tail,
 // rather than a serif narration box. Matches how webtoon dialogue reads.
+
+// A bubble that swallows the drawing stops being a comic. Long steps are
+// trimmed to whole sentences that fit the budget; the untrimmed text stays
+// on the recipe and in the panel's alt text.
+const BUBBLE_MAX_CHARS = 120;
+const BUBBLE_MAX_LINES = 4;
+const BUBBLE_MAX_HEIGHT = 0.32;   // fraction of panel height
+
+export function shortenForBubble(text, maxChars = BUBBLE_MAX_CHARS){
+  const full = String(text || "").trim().replace(/\s+/g, " ");
+  if(full.length <= maxChars) return full;
+
+  // Prefer dropping whole sentences over cutting mid-thought.
+  const sentences = full.split(/(?<=[.!?])\s+/);
+  let kept = "";
+  for(const sentence of sentences){
+    const candidate = kept ? `${kept} ${sentence}` : sentence;
+    if(candidate.length > maxChars) break;
+    kept = candidate;
+  }
+  // Only accept the sentence cut if it actually uses the budget; otherwise
+  // a word-boundary cut carries more of the instruction.
+  if(kept.length >= maxChars * 0.7) return kept;
+
+  const cut = full.slice(0, maxChars);
+  const boundary = cut.lastIndexOf(" ");
+  return (boundary > 0 ? cut.slice(0, boundary) : cut).replace(/[,;:]$/, "") + "…";
+}
+
 const BUBBLE_FONT = "'Trebuchet MS', 'Helvetica Neue', Arial, sans-serif";
 
 function bubblePath(x, y, w, h, r, tailX){
@@ -171,20 +200,21 @@ export function composePanelSvg({ bytes, mime, caption, panelIndex = 0, panelCou
 
   const pad = Math.round(panelW * 0.04);
   const baseFont = Math.max(16, Math.round(panelW * FONT_RATIO));
-  const minFont = Math.max(12, Math.round(panelW * MIN_FONT_RATIO));
+  const minFont = Math.max(13, Math.round(panelW * MIN_FONT_RATIO));
   const boxW = panelW - pad * 2;
-  const text = String(caption?.text || "").toUpperCase();
+  const text = shortenForBubble(caption?.text).toUpperCase();
 
   let fontSize = baseFont;
-  let lines, lineHeight, boxH;
+  let lines, lineHeight, boxH, badgeR, textInset;
   for(;;){
-    lineHeight = Math.round(fontSize * 1.3);
-    // All-caps sans runs wider than mixed-case serif.
-    const maxChars = Math.max(10, Math.floor((boxW - fontSize * 1.6) / (fontSize * 0.62)));
-    lines = wrapText(text, maxChars, 8);
-    boxH = lines.length * lineHeight + fontSize * 1.25;
-    const clipped = lines.some(line => line.endsWith("…"));
-    if((boxH <= H * 0.40 && !clipped) || fontSize <= minFont) break;
+    lineHeight = Math.round(fontSize * 1.28);
+    badgeR = Math.round(fontSize * 0.8);
+    // Keep the lettering clear of both rounded corners and the step badge.
+    textInset = Math.round(badgeR * 1.6);
+    const maxChars = Math.max(10, Math.floor((boxW - textInset * 2) / (fontSize * 0.62)));
+    lines = wrapText(text, maxChars, BUBBLE_MAX_LINES);
+    boxH = lines.length * lineHeight + fontSize * 1.5;
+    if(boxH <= H * BUBBLE_MAX_HEIGHT || fontSize <= minFont) break;
     fontSize -= 1;
   }
 
@@ -192,20 +222,22 @@ export function composePanelSvg({ bytes, mime, caption, panelIndex = 0, panelCou
   const y = Math.round(H - boxH - pad);
   const stroke = Math.max(3, Math.round(panelW * 0.007));
   const radius = Math.round(fontSize * 0.9);
-  const badgeR = Math.round(fontSize * 0.85);
+  // The badge straddles the top-left corner so it never sits under a line.
+  const badgeCx = Math.round(x + badgeR * 0.9);
+  const badgeCy = Math.round(y);
 
   const bubble = text ? `
-  <path d="${bubblePath(x, y, Math.round(boxW), Math.round(boxH), radius, Math.round(originX + panelW * 0.3))}"
+  <path d="${bubblePath(x, y, Math.round(boxW), Math.round(boxH), radius, Math.round(originX + panelW * 0.34))}"
         fill="#FFFFFF" stroke="${PALETTE.ink}" stroke-width="${stroke}" stroke-linejoin="round"/>
-  <circle cx="${Math.round(x + badgeR + stroke)}" cy="${Math.round(y + badgeR + stroke)}" r="${badgeR}"
-          fill="${PALETTE.red}" stroke="${PALETTE.ink}" stroke-width="${Math.max(2, Math.round(stroke * 0.6))}"/>
-  <text x="${Math.round(x + badgeR + stroke)}" y="${Math.round(y + badgeR + stroke + fontSize * 0.34)}"
-        font-family="${BUBBLE_FONT}" font-size="${Math.round(fontSize * 0.85)}" font-weight="bold"
-        fill="#FFFFFF" text-anchor="middle">${caption.n}</text>
-  ${lines.map((line, li) => `<text x="${Math.round(originX + panelW / 2)}" y="${Math.round(y + fontSize * 1.5 + li * lineHeight)}"
+  ${lines.map((line, li) => `<text x="${Math.round(originX + panelW / 2)}" y="${Math.round(y + fontSize * 1.55 + li * lineHeight)}"
         font-family="${BUBBLE_FONT}" font-size="${fontSize}" font-weight="bold"
         letter-spacing="${(fontSize * 0.02).toFixed(2)}"
-        fill="${PALETTE.ink}" text-anchor="middle">${escapeXml(line)}</text>`).join("")}` : "";
+        fill="${PALETTE.ink}" text-anchor="middle">${escapeXml(line)}</text>`).join("")}
+  <circle cx="${badgeCx}" cy="${badgeCy}" r="${badgeR}"
+          fill="${PALETTE.red}" stroke="${PALETTE.ink}" stroke-width="${Math.max(2, Math.round(stroke * 0.7))}"/>
+  <text x="${badgeCx}" y="${Math.round(badgeCy + fontSize * 0.32)}"
+        font-family="${BUBBLE_FONT}" font-size="${Math.round(fontSize * 0.85)}" font-weight="bold"
+        fill="#FFFFFF" text-anchor="middle">${caption.n}</text>` : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${Math.round(panelW)}" height="${H}" viewBox="${Math.round(originX)} 0 ${Math.round(panelW)} ${H}">
   <image href="${dataUri}" xlink:href="${dataUri}" x="0" y="0" width="${W}" height="${H}"/>${bubble}
