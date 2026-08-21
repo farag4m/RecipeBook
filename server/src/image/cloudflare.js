@@ -28,8 +28,8 @@ export async function generate({ prompt }){
   const body = {
     prompt: prompt.slice(0, 2000),
     negative_prompt: NEGATIVE,
-    width: Number(process.env.COMIC_WIDTH || 1440),
-    height: Number(process.env.COMIC_HEIGHT || 576)
+    width: Number(process.env.PANEL_WIDTH || 1024),
+    height: Number(process.env.PANEL_HEIGHT || 1024)
   };
   if(process.env.CLOUDFLARE_IMAGE_STEPS) body.steps = Number(process.env.CLOUDFLARE_IMAGE_STEPS);
 

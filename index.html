@@ -87,10 +87,14 @@
   .step-title{font-family:'Bangers';font-size:23px;line-height:1.1;letter-spacing:.02em;color:var(--ink);}
   .step-caption{font-size:13.5px;line-height:1.45;color:var(--ink-soft);margin:0 0 12px 66px;}
   .step-card img{display:block;width:100%;border:3px solid var(--ink);border-radius:12px;background:#fff;}
-  .comic-strip{background:var(--paper-raised);border:3px solid var(--ink);border-radius:14px;box-shadow:var(--shadow-sm);padding:12px;margin-bottom:16px;}
-  .comic-strip-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
-  .comic-badge{font-family:'Bangers';font-size:14px;letter-spacing:.03em;background:var(--butter);border:2.5px solid var(--ink);border-radius:20px;padding:2px 12px;box-shadow:2px 2px 0 var(--ink);}
-  .comic-strip img{display:block;width:100%;border:3px solid var(--ink);border-radius:10px;background:#fff;}
+  .comic-book{display:flex;flex-direction:column;gap:14px;}
+  .comic-chapter{font-family:'Bangers';font-size:15px;letter-spacing:.04em;background:var(--butter);border:3px solid var(--ink);border-radius:20px;padding:3px 14px;box-shadow:2px 2px 0 var(--ink);align-self:flex-start;margin-top:6px;}
+  .comic-panel{display:block;width:100%;height:auto;border:4px solid var(--ink);border-radius:12px;background:#FFF4DC;box-shadow:var(--shadow-sm);}
+  /* Two up only where there is real room; a phone always gets one per row. */
+  @media (min-width:900px){
+    .comic-book{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+    .comic-chapter{grid-column:1/-1;}
+  }
   .gen-steps{display:grid;gap:6px;margin-top:10px;}
   .gen-step{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);font-family:'Comic Neue';letter-spacing:0;text-transform:none;}
   .gen-step .dot{width:11px;height:11px;border-radius:50%;border:2px solid var(--ink);background:var(--paper);flex-shrink:0;}
@@ -302,9 +306,29 @@ function plainStepRow(recipe, idx){
 
 // Comics cover consecutive runs of steps. Each strip is drawn with its panel
 // captions underneath; any step no comic covers falls back to a plain row.
+function panelUrl(comic, panelIdx){
+  // Newer art is drawn one image per step; older strips are cropped to the
+  // requested panel on the way out.
+  const panel = (comic.panels || [])[panelIdx];
+  if(panel && panel.url) return apiUrl(panel.url);
+  const base = comic.url || "";
+  const abs = /^https?:/i.test(base) ? base : apiUrl(base);
+  return `${abs}${abs.includes("?") ? "&" : "?"}panel=${panelIdx}`;
+}
+
+function panelCount(comic){
+  if(comic.panels && comic.panels.length) return comic.panels.length;
+  if(Array.isArray(comic.stepRange)) return comic.stepRange[1] - comic.stepRange[0] + 1;
+  return 1;
+}
+
+// The comic is the recipe: one big panel per step, read top to bottom, with
+// the instruction lettered into the art itself.
 function renderStepDisplay(recipe){
   const comics = (recipe.comics || []).filter(c => Array.isArray(c.stepRange));
-  if(comics.length === 0) return recipe.steps.map((s, i) => plainStepRow(recipe, i)).join("");
+  if(comics.length === 0){
+    return `<div class="step-list">${recipe.steps.map((s, i) => plainStepRow(recipe, i)).join("")}</div>`;
+  }
 
   const covered = new Set();
   const ordered = [...comics].sort((a, b) => a.stepRange[0] - b.stepRange[0]);
@@ -319,28 +343,25 @@ function renderStepDisplay(recipe){
       if(!covered.has(idx)){ blocks.push(plainStepRow(recipe, idx)); covered.add(idx); }
     }
 
-    for(let idx = from; idx <= to; idx++){
-      if(idx >= 0 && idx < recipe.steps.length) covered.add(idx);
+    if(ordered.length > 1){
+      blocks.push(`<div class="comic-chapter">Part ${comic.index + 1}</div>`);
     }
 
-    // The step text is lettered onto the art itself, so nothing is repeated
-    // underneath - the strip is the recipe.
-    blocks.push(`
-      <div class="comic-strip">
-        <div class="comic-strip-head">
-          <span class="comic-badge">Part ${comic.index + 1}</span>
-          <span class="hint">Steps ${from + 1}${to > from ? "-" + (to + 1) : ""}</span>
-        </div>
-        <img src="${escapeHtml(imageUrl(comic))}" alt="${escapeHtml(comic.name || "Comic")}" loading="lazy">
-      </div>`);
-
+    const count = panelCount(comic);
+    for(let p = 0; p < count; p++){
+      const idx = from + p;
+      if(idx > to || idx >= recipe.steps.length) break;
+      covered.add(idx);
+      blocks.push(`<img class="comic-panel" src="${escapeHtml(panelUrl(comic, p))}"
+        alt="Step ${idx + 1}: ${escapeHtml(recipe.steps[idx])}" loading="lazy">`);
+    }
     cursor = to + 1;
   }
 
   for(let idx = cursor; idx < recipe.steps.length; idx++){
     if(!covered.has(idx)) blocks.push(plainStepRow(recipe, idx));
   }
-  return blocks.join("");
+  return `<div class="comic-book">${blocks.join("")}</div>`;
 }
 
 function showToast(msg){
@@ -381,7 +402,7 @@ function openView(id){
       <div class="field-label">Ingredients</div>
       <div class="ing-grid">${r.ingredients.map(i => `<div class="ing-chip"><span class="ing-emoji">${guessIcon(i)}</span>${escapeHtml(i)}</div>`).join("")}</div>
       <div class="field-label">Steps</div>
-      <div class="step-list">${renderStepDisplay(r)}</div>
+      ${renderStepDisplay(r)}
       ${r.notes ? `<div class="notes">${escapeHtml(r.notes)}</div>` : ""}
       <div class="footer-row">
         <span>${r.servings ? "Serves " + escapeHtml(r.servings) : ""}</span>

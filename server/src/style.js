@@ -47,7 +47,20 @@ export function layoutContract(panelCount){
   ].join(", ");
 }
 
-// Assembles the final image prompt from a Groq-authored scene list.
+// A single comic panel, drawn full-bleed. Panels are generated one per step
+// so each one can fill a phone screen instead of being a third of a strip.
+export function buildPanelPrompt({ recipeTitle, scene, index, total }){
+  return [
+    `A single hand-painted comic book panel from "${recipeTitle}" (panel ${index + 1} of ${total}).`,
+    "One full-bleed illustration filling the whole frame, no panel grid, no borders, no gutters.",
+    `Scene: ${scene}.`,
+    "Leave the lower third of the image simple and uncluttered so a caption can sit there.",
+    `Art style: ${STYLE_POSITIVE}.`,
+    `Strictly avoid: ${STYLE_NEGATIVE}.`
+  ].join(" ");
+}
+
+// Assembles the final image prompt from an LLM-authored scene list.
 export function buildImagePrompt({ recipeTitle, panels }){
   const scenes = panels
     .map((panel, idx) => `PANEL ${idx + 1}: ${panel.scene}`)

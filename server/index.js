@@ -13,10 +13,10 @@ import { fileURLToPath } from "node:url";
 
 import { MAX_STEPS, PANELS_PER_CHUNK, MAX_CHUNKS, normalizeSteps, planChunks } from "./src/chunk.js";
 import { condenseSteps, authorPanels, llmConfigured, llmStatus, LLM_MODEL } from "./src/llm.js";
-import { buildImagePrompt, seedFor, STYLE_NAME } from "./src/style.js";
+import { buildPanelPrompt, seedFor, STYLE_NAME } from "./src/style.js";
 import { renderStrip, providerStatus } from "./src/image/index.js";
 import { normalizeRecipe, newId, slugify, CATEGORIES } from "./src/recipe.js";
-import { composeComicSvg } from "./src/comic/compose.js";
+import { composeComicSvg, composePanelSvg } from "./src/comic/compose.js";
 import * as db from "./src/db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -99,6 +99,8 @@ async function drawComics(recipe){
   const chunks = planChunks(steps);
   const concurrency = Number(process.env.COMIC_CONCURRENCY || 2);
 
+  // One image per step. A three-panel strip collapses to slivers on a phone,
+  // so each step gets its own full-bleed panel that can fill the screen.
   const comics = await mapLimit(chunks, concurrency, async chunk => {
     const panels = await authorPanels({
       recipeTitle: recipe.title,
@@ -107,37 +109,56 @@ async function drawComics(recipe){
       chunk,
       totalChunks: chunks.length
     });
-    const prompt = buildImagePrompt({ recipeTitle: recipe.title, panels });
-    const seed = seedFor(`${recipe.title}#${chunk.index}`);
-    const image = await renderStrip({ prompt, panels, recipeTitle: recipe.title, seed });
 
-    const imageId = `${recipe.id}-${chunk.index + 1}`;
-    // The step text becomes the narration lettering drawn over the art.
-    const captions = chunk.steps.map((step, i) => ({
-      n: chunk.startStep + i + 1,
-      text: step.text
-    }));
-    await db.putComicImage({
-      id: imageId,
-      recipeId: recipe.id,
-      idx: chunk.index,
-      mime: image.mime,
-      base64: image.base64,
-      captions
-    });
+    const drawn = [];
+    for(const [i, panel] of panels.entries()){
+      const stepIndex = chunk.startStep + i;
+      const step = chunk.steps[i];
+      const imageId = `${recipe.id}-${chunk.index + 1}-${i + 1}`;
+      const prompt = buildPanelPrompt({
+        recipeTitle: recipe.title,
+        scene: panel.scene,
+        index: stepIndex,
+        total: steps.length
+      });
+
+      try{
+        const image = await renderStrip({
+          prompt,
+          panels: [panel],
+          recipeTitle: recipe.title,
+          seed: seedFor(`${recipe.title}#${stepIndex}`)
+        });
+        await db.putComicImage({
+          id: imageId,
+          recipeId: recipe.id,
+          idx: stepIndex,
+          mime: image.mime,
+          base64: image.base64,
+          captions: [{ n: stepIndex + 1, text: step?.text || panel.caption }]
+        });
+        drawn.push({
+          stepIndex,
+          url: `/api/images/${imageId}`,
+          caption: panel.caption,
+          provider: image.provider
+        });
+      }catch(e){
+        console.error(`[panel ${imageId}]`, e.message);
+      }
+    }
 
     return {
       index: chunk.index,
-      url: `/api/images/${imageId}`,
       name: `${recipe.title} - part ${chunk.index + 1}`,
       stepRange: [chunk.startStep + 1, chunk.endStep + 1],
-      provider: image.provider,
-      panels: panels.map(panel => ({ stepIndex: panel.stepIndex, caption: panel.caption }))
+      provider: drawn[0]?.provider || null,
+      panels: drawn
     };
   });
 
   return {
-    comics,
+    comics: comics.filter(c => c.panels.length),
     steps,
     plan: {
       submittedSteps: submitted.length,
@@ -157,18 +178,33 @@ app.get("/api/images/:id", wrap(async (req, res) => {
   if(!image) return res.status(404).json({ error: "Image not found" });
 
   const captions = Array.isArray(image.captions) ? image.captions : [];
-  const wantsRaw = req.query.raw === "1" || image.mime === "image/svg+xml";
+  if(req.query.raw === "1" || image.mime === "image/svg+xml"){
+    res.set("Content-Type", image.mime);
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    return res.send(image.bytes);
+  }
 
-  // Lettering is drawn over the art on the way out, so the stored image stays
-  // clean and the narration can be restyled without redrawing anything.
-  if(!wantsRaw && captions.length){
-    res.set("Content-Type", "image/svg+xml");
-    res.set("Cache-Control", "public, max-age=300");
+  res.set("Cache-Control", "public, max-age=300");
+  res.set("Content-Type", "image/svg+xml");
+
+  // One panel at a time. Art drawn as a wide strip is cropped down to the
+  // requested panel so it can fill a narrow screen instead of shrinking.
+  const panel = Number.parseInt(req.query.panel, 10);
+  if(Number.isInteger(panel) && captions.length){
+    return res.send(composePanelSvg({
+      bytes: image.bytes,
+      mime: image.mime,
+      caption: captions[Math.min(Math.max(0, panel), captions.length - 1)],
+      panelIndex: panel,
+      panelCount: captions.length
+    }));
+  }
+
+  if(captions.length){
     return res.send(composeComicSvg({ bytes: image.bytes, mime: image.mime, captions }));
   }
 
   res.set("Content-Type", image.mime);
-  res.set("Cache-Control", "public, max-age=31536000, immutable");
   res.send(image.bytes);
 }));
 
