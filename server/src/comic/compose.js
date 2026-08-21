@@ -57,18 +57,30 @@ export function composeComicSvg({ bytes, mime, captions }){
   // Geometry scales with the art so it holds up at any output size.
   const panelW = W / count;
   const pad = Math.round(W * 0.014);
-  const fontSize = Math.max(13, Math.round(W * 0.0165));
-  const lineHeight = Math.round(fontSize * 1.32);
+  const baseFont = Math.max(13, Math.round(W * 0.0165));
+  const minFont = Math.max(9, Math.round(W * 0.0092));
   const boxW = panelW - pad * 2;
-  const badge = Math.round(fontSize * 1.5);
-  const textInset = pad * 0.9 + badge * 1.05;
-  const textW = boxW - textInset - pad * 0.9;
-  const maxChars = Math.max(14, Math.floor(textW / (fontSize * 0.56)));
+  // A recipe step is a whole sentence, so the lettering is sized to fit the
+  // longest one rather than truncating it. Shrink until it fits, and only
+  // clip if even the smallest size cannot hold it.
+  const MAX_LINES = 7;
+  const maxBoxH = H * 0.46;
+  let fontSize = baseFont;
+  let wrapped, lineHeight, badge, textInset, boxH;
 
-  const wrapped = panels.map(panel => wrapText(panel.text, maxChars, 4));
-  const maxLines = Math.max(1, ...wrapped.map(lines => lines.length));
-  // One height for every box so the strip reads as a single row of lettering.
-  const boxH = maxLines * lineHeight + pad * 1.6;
+  for(;;){
+    lineHeight = Math.round(fontSize * 1.32);
+    badge = Math.round(fontSize * 1.5);
+    textInset = pad * 0.9 + badge * 1.05;
+    const textW = boxW - textInset - pad * 0.9;
+    const maxChars = Math.max(12, Math.floor(textW / (fontSize * 0.56)));
+    wrapped = panels.map(panel => wrapText(panel.text, maxChars, MAX_LINES));
+    const lines = Math.max(1, ...wrapped.map(l => l.length));
+    boxH = lines * lineHeight + pad * 1.6;
+    const clipped = wrapped.some(l => l.some(line => line.endsWith("…")));
+    if((boxH <= maxBoxH && !clipped) || fontSize <= minFont) break;
+    fontSize -= 1;
+  }
 
   const boxes = panels.map((panel, i) => {
     const lines = wrapped[i];
