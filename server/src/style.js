@@ -20,16 +20,19 @@ export const PALETTE = {
 // Modelled on webtoon/manhwa art: glossy full-colour digital painting with
 // crisp linework and cel shading, not the softer watercolour look this
 // started with.
-export const STYLE_POSITIVE = [
+const STYLE_BASE = [
   "glossy full-colour digital webtoon illustration in polished Korean manhwa style",
   "clean crisp black ink linework with confident varied line weight",
   "cel shading with smooth airbrushed gradients and soft ambient occlusion",
   "vivid saturated colour, warm kitchen lighting with bright specular highlights",
   "subtle rim light on edges, gentle bloom, glossy sheen on metal and liquid",
   "high detail and sharp focus, clean uncluttered background with soft depth of field",
-  "dynamic close-up composition, slight cinematic angle",
-  "hands only - no faces, no characters, no people in frame"
+  "dynamic close-up composition, slight cinematic angle"
 ].join(", ");
+
+// Panels are shot over a cook's hands; covers are not.
+export const STYLE_POSITIVE = STYLE_BASE + ", hands only - no faces, no characters, no people in frame";
+export const STYLE_COVER = STYLE_BASE;
 
 // Negative contract - things that break the set.
 export const STYLE_NEGATIVE = [
@@ -54,15 +57,13 @@ export function layoutContract(panelCount){
 // The card cover: the finished dish, plated. Cropping a step panel gives you
 // whatever that step happened to show - often a closed pressure cooker - so
 // the hero shot is generated in its own right.
-export function buildCoverPrompt({ recipeTitle, ingredients = [], finalStep = "" }){
+export function buildCoverPrompt({ recipeTitle, ingredients = [] }){
   return [
-    `Hero food illustration of the finished dish "${recipeTitle}", plated and ready to eat.`,
-    ingredients.length ? `It is made with ${ingredients.slice(0, 8).join(", ")}.` : "",
-    finalStep ? `The dish is finished like this: ${finalStep}` : "",
-    "Show the completed dish served in a bowl or on a plate, filling the frame,",
-    "shot slightly from above, appetising and freshly made, with garnish and steam.",
-    "No hands, no cooking in progress, no raw ingredients, no pans on a stove.",
-    `Art style: ${STYLE_POSITIVE}.`,
+    `Appetising hero food illustration of the finished dish "${recipeTitle}", plated and ready to eat.`,
+    ingredients.length ? `The dish contains ${ingredients.slice(0, 8).join(", ")}.` : "",
+    "The finished dish is served in a bowl or on a plate resting on a table,",
+    "filling the frame, seen from slightly above, freshly made with garnish and gentle steam.",
+    `Art style: ${STYLE_COVER}.`,
     `Strictly avoid: ${STYLE_NEGATIVE}.`
   ].filter(Boolean).join(" ");
 }

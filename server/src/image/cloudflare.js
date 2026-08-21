@@ -1,9 +1,9 @@
-// Cloudflare Workers AI - the only provider here with a genuinely free image
-// tier, so it takes precedence when configured.
+// Cloudflare Workers AI - the free image tier, and the default renderer.
 //
-// Model note: flux-1-schnell is fast but low fidelity (white grounds, weak
-// hands). leonardo/lucid-origin honours the cream ground, the ink gutters and
-// an explicit wide aspect, so it is the default.
+// The free allowance is 10,000 neurons per account per day, which one full
+// recipe redraw can exhaust. Several accounts can be configured; when one
+// reports its allowance spent, it is parked until the daily reset and the
+// next account takes over automatically.
 
 const MODEL = process.env.CLOUDFLARE_IMAGE_MODEL || "@cf/leonardo/lucid-origin";
 
@@ -14,30 +14,71 @@ const NEGATIVE = [
   "faces", "people", "portrait", "photorealistic", "3d render", "white background"
 ].join(", ");
 
-export function available(){
-  return Boolean(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID);
+// accountId -> epoch ms at which its allowance is expected back.
+const exhausted = new Map();
+
+// Cloudflare's allowance rolls over at UTC midnight.
+function nextResetAt(){
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
 }
 
-export async function generate({ prompt }){
-  const token = process.env.CLOUDFLARE_API_TOKEN;
-  const account = process.env.CLOUDFLARE_ACCOUNT_ID;
-  if(!token || !account){
-    throw new Error("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are both required");
+// Accepts either CLOUDFLARE_ACCOUNTS as a JSON array, or numbered pairs:
+// CLOUDFLARE_ACCOUNT_ID / _2 / _3 with matching CLOUDFLARE_API_TOKEN.
+export function accounts(){
+  const raw = process.env.CLOUDFLARE_ACCOUNTS;
+  if(raw){
+    try{
+      const parsed = JSON.parse(raw);
+      if(Array.isArray(parsed)){
+        return parsed
+          .map((a, i) => ({ label: a.label || `account${i + 1}`, id: a.id, token: a.token }))
+          .filter(a => a.id && a.token);
+      }
+    }catch(e){
+      console.error("[cloudflare] CLOUDFLARE_ACCOUNTS is not valid JSON:", e.message);
+    }
   }
 
-  const body = {
-    prompt: prompt.slice(0, 2000),
-    negative_prompt: NEGATIVE,
-    width: Number(process.env.PANEL_WIDTH || 1024),
-    height: Number(process.env.PANEL_HEIGHT || 1024)
-  };
-  if(process.env.CLOUDFLARE_IMAGE_STEPS) body.steps = Number(process.env.CLOUDFLARE_IMAGE_STEPS);
+  const list = [];
+  for(const suffix of ["", "_2", "_3", "_4", "_5"]){
+    const id = process.env[`CLOUDFLARE_ACCOUNT_ID${suffix}`];
+    const token = process.env[`CLOUDFLARE_API_TOKEN${suffix}`];
+    if(id && token) list.push({ label: `account${list.length + 1}`, id, token });
+  }
+  return list;
+}
 
+function isQuotaError(status, body){
+  return status === 429 || /daily free allocation|neurons|quota/i.test(body || "");
+}
+
+export function available(){
+  return accounts().some(a => !isParked(a.id));
+}
+
+function isParked(id){
+  const until = exhausted.get(id);
+  if(!until) return false;
+  if(Date.now() >= until){ exhausted.delete(id); return false; }
+  return true;
+}
+
+export function status(){
+  return accounts().map(a => ({
+    label: a.label,
+    id: a.id.slice(0, 8) + "…",
+    available: !isParked(a.id),
+    resetsAt: exhausted.get(a.id) ? new Date(exhausted.get(a.id)).toISOString() : null
+  }));
+}
+
+async function callAccount(account, body){
   const res = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${MODEL}`,
+    `https://api.cloudflare.com/client/v4/accounts/${account.id}/ai/run/${MODEL}`,
     {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${account.token}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(Number(process.env.IMAGE_TIMEOUT_MS || 180000))
     }
@@ -45,7 +86,9 @@ export async function generate({ prompt }){
 
   if(!res.ok){
     const detail = await res.text().catch(() => "");
-    throw new Error(`Cloudflare ${res.status}: ${detail.slice(0, 300)}`);
+    const err = new Error(`Cloudflare ${res.status}: ${detail.slice(0, 200)}`);
+    err.quota = isQuotaError(res.status, detail);
+    throw err;
   }
 
   // Some models answer with a JSON envelope holding base64, others stream the
@@ -58,8 +101,45 @@ export async function generate({ prompt }){
   }
 
   const data = await res.json();
-  if(!data.success) throw new Error(`Cloudflare: ${JSON.stringify(data.errors || data).slice(0, 300)}`);
+  if(!data.success){
+    const detail = JSON.stringify(data.errors || data);
+    const err = new Error(`Cloudflare: ${detail.slice(0, 200)}`);
+    err.quota = isQuotaError(200, detail);
+    throw err;
+  }
   const b64 = data?.result?.image;
   if(!b64) throw new Error("Cloudflare returned no image data");
   return { provider: "cloudflare", mime: "image/jpeg", base64: b64 };
+}
+
+export async function generate({ prompt, negative = [] }){
+  const all = accounts();
+  if(all.length === 0) throw new Error("No Cloudflare account is configured");
+
+  const body = {
+    prompt: prompt.slice(0, 2000),
+    negative_prompt: [NEGATIVE, ...negative].join(', '),
+    width: Number(process.env.PANEL_WIDTH || 1024),
+    height: Number(process.env.PANEL_HEIGHT || 1024)
+  };
+  if(process.env.CLOUDFLARE_IMAGE_STEPS) body.steps = Number(process.env.CLOUDFLARE_IMAGE_STEPS);
+
+  const failures = [];
+  for(const account of all){
+    if(isParked(account.id)){
+      failures.push(`${account.label}: allowance spent until reset`);
+      continue;
+    }
+    try{
+      return await callAccount(account, body);
+    }catch(e){
+      if(e.quota){
+        // Park it for the rest of the UTC day and move on.
+        exhausted.set(account.id, nextResetAt());
+        console.warn(`[cloudflare] ${account.label} allowance spent, switching account`);
+      }
+      failures.push(`${account.label}: ${e.message}`);
+    }
+  }
+  throw new Error(`All Cloudflare accounts failed - ${failures.join(" | ")}`);
 }

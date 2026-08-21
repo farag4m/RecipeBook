@@ -27,6 +27,11 @@ services:
         sync: false
       - key: CLOUDFLARE_ACCOUNT_ID
         sync: false
+      # Extra accounts are rotated to when one spends its daily allowance.
+      - key: CLOUDFLARE_API_TOKEN_2
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID_2
+        sync: false
       - key: CLOUDFLARE_IMAGE_MODEL
         value: "@cf/leonardo/lucid-origin"
       - key: IMAGE_PROVIDER

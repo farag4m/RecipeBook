@@ -182,15 +182,15 @@ async function drawComics(recipe){
 
 // Draws the plated hero shot used on the recipe card.
 async function drawCover(recipe){
-  const finalStep = recipe.steps[recipe.steps.length - 1] || "";
   const prompt = buildCoverPrompt({
     recipeTitle: recipe.title,
-    ingredients: recipe.ingredients,
-    finalStep
+    ingredients: recipe.ingredients
   });
   const image = await renderStrip({
     prompt, panels: [], recipeTitle: recipe.title,
-    seed: seedFor(`${recipe.title}#cover`)
+    seed: seedFor(`${recipe.title}#cover`),
+    // Panels want hands in shot; a plated cover does not.
+    negative: ["hands", "fingers", "arms", "holding a plate", "cooking in progress", "raw ingredients"]
   });
   const id = `${recipe.id}-cover`;
   await db.putComicImage({

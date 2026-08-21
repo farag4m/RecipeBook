@@ -19,6 +19,7 @@ export function providerStatus(){
   return {
     configured: process.env.IMAGE_PROVIDER || "auto",
     cloudflare: cloudflare.available(),
+    cloudflareAccounts: cloudflare.status(),
     openrouter: openrouter.available(),
     gemini: gemini.available(),
     openai: openai.available(),
@@ -36,11 +37,11 @@ export function resolveOrder(){
 }
 
 // Tries each provider in turn; returns the first image plus any failures.
-export async function renderStrip({ prompt, panels, recipeTitle, seed }){
+export async function renderStrip({ prompt, panels, recipeTitle, seed, negative = [] }){
   const attempts = [];
   for(const name of resolveOrder()){
     try{
-      const image = await PROVIDERS[name].generate({ prompt, panels, recipeTitle, seed });
+      const image = await PROVIDERS[name].generate({ prompt, panels, recipeTitle, seed, negative });
       return { ...image, attempts };
     }catch(e){
       attempts.push({ provider: name, error: e.message });
