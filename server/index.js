@@ -192,6 +192,13 @@ async function drawCover(recipe){
     // Panels want hands in shot; a plated cover does not.
     negative: ["hands", "fingers", "arms", "holding a plate", "cooking in progress", "raw ingredients"]
   });
+
+  // The storyboard fallback letters captions onto a blank page. A cover has
+  // no captions, so it would render an empty file - better no cover at all,
+  // since the card then falls back to a real panel.
+  if(image.provider === "svg"){
+    throw new Error("no image provider available for a cover");
+  }
   const id = `${recipe.id}-cover`;
   await db.putComicImage({
     id, recipeId: recipe.id, idx: -1,

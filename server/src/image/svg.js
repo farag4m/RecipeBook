@@ -95,6 +95,10 @@ export function renderStripSvg({ panels, title }){
 }
 
 export async function generate({ panels, recipeTitle }){
+  // Nothing to letter means nothing to draw.
+  if(!panels || panels.length === 0){
+    throw new Error("The storyboard fallback needs at least one panel");
+  }
   const svg = renderStripSvg({ panels, title: recipeTitle });
   return {
     provider: "svg",
