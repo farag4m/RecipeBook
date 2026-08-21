@@ -140,7 +140,6 @@
   .tool-box{background:#FFF0B8;border:3px dashed var(--ink);border-radius:10px;padding:16px;margin-bottom:6px;}
   .share-link{word-break:break-all;background:#fff;border:2px solid var(--ink);border-radius:8px;padding:10px;font-size:12px;margin-top:10px;}
   .status-line{font-size:12px;color:var(--ink-soft);margin-top:10px;line-height:1.45;}
-  .sync-pill{display:inline-block;background:var(--paper-raised);border:2px solid var(--ink);border-radius:20px;padding:3px 9px;margin-left:6px;color:var(--ink);}
   .error-msg{color:var(--rule-red);font-size:13px;font-weight:700;margin-top:8px;}
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--pop);color:#fff;border:3px solid var(--ink);border-radius:10px;padding:12px 20px;font-family:'Bangers';font-size:16px;letter-spacing:.02em;box-shadow:4px 4px 0 var(--ink);opacity:0;transition:opacity .25s ease, transform .25s ease;z-index:100;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -212,7 +211,6 @@ let searchTerm = "";
 let lastError = "";
 let syncTimer = null;
 let syncInFlight = false;
-let lastSyncAt = null;
 
 const grid = document.getElementById("grid");
 const tabsEl = document.getElementById("tabs");
@@ -250,7 +248,6 @@ async function loadRecipes(silent = false){
     const data = await api("/api/recipes");
     recipes = data.recipes || [];
     lastError = "";
-    lastSyncAt = new Date();
   }catch(e){
     lastError = "Could not reach the recipe service (" + (e.message || "network error") + ").";
   }finally{
@@ -259,7 +256,8 @@ async function loadRecipes(silent = false){
   }
 }
 
-function startSyncTimer(){
+// Quietly picks up recipes added from another device.
+function startBackgroundRefresh(){
   if(syncTimer) clearInterval(syncTimer);
   syncTimer = setInterval(() => loadRecipes(true), POLL_MS);
 }
@@ -309,7 +307,7 @@ function render(){
 
   subcount.innerHTML = lastError
     ? `<span class="err-banner">⚠️ ${escapeHtml(lastError)}</span>`
-    : `${recipes.length} recipe${recipes.length === 1 ? "" : "s"} <span class="sync-pill">${lastSyncAt ? "synced " + lastSyncAt.toLocaleTimeString() : "loading"}</span>`;
+    : `${recipes.length} recipe${recipes.length === 1 ? "" : "s"} in the box`;
 
   if(filtered.length === 0){
     grid.innerHTML = `<div class="empty"><b>Nothing here yet</b>${recipes.length === 0 ? "Add your first family recipe." : "No recipes match this view."}</div>`;
@@ -731,7 +729,7 @@ document.getElementById("btnFormat").onclick = openSmartAdd;
 
 loadRecipes();
 openSharedRecipeFromHash();
-startSyncTimer();
+startBackgroundRefresh();
 </script>
 </body>
 </html>
