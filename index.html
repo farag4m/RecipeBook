@@ -67,15 +67,15 @@
   .empty{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--ink-soft);}
   .empty b{display:block;font-family:'Bangers';font-weight:400;font-size:30px;color:var(--rule-red);margin-bottom:8px;letter-spacing:.03em;}
   .overlay{position:fixed;inset:0;background:rgba(23,21,18,0.6);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50;}
-  .modal{background:var(--paper-raised);width:100%;max-width:560px;max-height:86vh;overflow-y:auto;border-radius:12px;border:4px solid var(--ink);box-shadow:8px 8px 0 var(--ink);padding:26px 28px 24px;position:relative;}
+  .modal{background:var(--paper-raised);width:100%;max-width:560px;overflow-x:hidden;max-height:86vh;overflow-y:auto;border-radius:12px;border:4px solid var(--ink);box-shadow:8px 8px 0 var(--ink);padding:26px 28px 24px;position:relative;}
   .modal.wide{max-width:720px;}
   .modal-close{position:absolute;top:12px;right:14px;background:var(--rule-red);color:#fff;border:2.5px solid var(--ink);border-radius:50%;width:30px;height:30px;font-size:18px;line-height:1;padding:0;box-shadow:2px 2px 0 var(--ink);}
   .modal h2{font-family:'Bangers', cursive;font-weight:400;font-size:32px;margin:0 0 6px;padding-right:20px;letter-spacing:.02em;}
   .modal .rule{height:4px;background:var(--rule-red);margin:14px 0;border-radius:2px;}
   .modal .field-label{font-family:'Bangers', cursive;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--sage-deep);margin:16px 0 8px;}
   .modal-icon{font-size:56px;line-height:1;transform:rotate(-3deg);}
-  .ing-grid{display:flex;flex-wrap:wrap;gap:8px;}
-  .ing-chip{display:flex;align-items:center;gap:6px;background:var(--paper);border:2.5px solid var(--ink);border-radius:20px;padding:6px 12px;font-size:13px;box-shadow:2px 2px 0 var(--ink);}
+  .ing-grid{display:flex;flex-wrap:wrap;gap:8px;min-width:0;}
+  .ing-chip{display:flex;align-items:center;gap:6px;max-width:100%;overflow-wrap:anywhere;background:var(--paper);border:2.5px solid var(--ink);border-radius:20px;padding:6px 12px;font-size:13px;box-shadow:2px 2px 0 var(--ink);}
   .ing-emoji{font-size:18px;}
   .step-list{display:flex;flex-direction:column;gap:10px;}
   .step-row{display:flex;align-items:flex-start;gap:10px;background:var(--paper);border:2.5px solid var(--ink);border-radius:10px;padding:9px 12px;font-size:13.5px;box-shadow:2px 2px 0 var(--ink);}
@@ -87,9 +87,9 @@
   .step-title{font-family:'Bangers';font-size:23px;line-height:1.1;letter-spacing:.02em;color:var(--ink);}
   .step-caption{font-size:13.5px;line-height:1.45;color:var(--ink-soft);margin:0 0 12px 66px;}
   .step-card img{display:block;width:100%;border:3px solid var(--ink);border-radius:12px;background:#fff;}
-  .comic-book{display:flex;flex-direction:column;gap:14px;}
+  .comic-book{display:flex;flex-direction:column;gap:14px;min-width:0;}
   .comic-chapter{font-family:'Bangers';font-size:15px;letter-spacing:.04em;background:var(--butter);border:3px solid var(--ink);border-radius:20px;padding:3px 14px;box-shadow:2px 2px 0 var(--ink);align-self:flex-start;margin-top:6px;}
-  .comic-panel{display:block;width:100%;height:auto;border:4px solid var(--ink);border-radius:12px;background:#FFF4DC;box-shadow:var(--shadow-sm);}
+  .comic-panel{display:block;width:100%;max-width:100%;height:auto;border:4px solid var(--ink);border-radius:12px;background:#FFF4DC;box-shadow:var(--shadow-sm);}
   /* Two up only where there is real room; a phone always gets one per row. */
   @media (min-width:900px){
     .comic-book{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
@@ -120,6 +120,8 @@
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--pop);color:#fff;border:3px solid var(--ink);border-radius:10px;padding:12px 20px;font-family:'Bangers';font-size:16px;letter-spacing:.02em;box-shadow:4px 4px 0 var(--ink);opacity:0;transition:opacity .25s ease, transform .25s ease;z-index:100;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   @media (max-width:760px){
+    .overlay{padding:8px;}
+    .modal{max-height:94vh;}
     .layout{flex-direction:column;}
     .tabs{flex-direction:row;flex-wrap:wrap;position:static;width:100%;min-width:0;}
     .header h1{font-size:40px;}
