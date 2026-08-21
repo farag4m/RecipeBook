@@ -2,20 +2,23 @@
 // whichever renderer is configured; the SVG storyboard is the last resort
 // and never fails.
 
+import * as cloudflare from "./cloudflare.js";
 import * as openrouter from "./openrouter.js";
 import * as gemini from "./gemini.js";
 import * as openai from "./openai.js";
 import * as pollinations from "./pollinations.js";
 import * as svg from "./svg.js";
 
-const PROVIDERS = { openrouter, gemini, openai, pollinations, svg };
+const PROVIDERS = { cloudflare, openrouter, gemini, openai, pollinations, svg };
 // Pollinations is keyless but far too low-fidelity for the house style, so it
 // is opt-in only (IMAGE_PROVIDER=pollinations) and never chosen automatically.
-const AUTO_ORDER = ["openrouter", "gemini", "openai"];
+// Cloudflare first: it is the only one with a free image tier.
+const AUTO_ORDER = ["cloudflare", "openrouter", "gemini", "openai"];
 
 export function providerStatus(){
   return {
     configured: process.env.IMAGE_PROVIDER || "auto",
+    cloudflare: cloudflare.available(),
     openrouter: openrouter.available(),
     gemini: gemini.available(),
     openai: openai.available(),
