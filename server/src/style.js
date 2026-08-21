@@ -51,6 +51,22 @@ export function layoutContract(panelCount){
   ].join(", ");
 }
 
+// The card cover: the finished dish, plated. Cropping a step panel gives you
+// whatever that step happened to show - often a closed pressure cooker - so
+// the hero shot is generated in its own right.
+export function buildCoverPrompt({ recipeTitle, ingredients = [], finalStep = "" }){
+  return [
+    `Hero food illustration of the finished dish "${recipeTitle}", plated and ready to eat.`,
+    ingredients.length ? `It is made with ${ingredients.slice(0, 8).join(", ")}.` : "",
+    finalStep ? `The dish is finished like this: ${finalStep}` : "",
+    "Show the completed dish served in a bowl or on a plate, filling the frame,",
+    "shot slightly from above, appetising and freshly made, with garnish and steam.",
+    "No hands, no cooking in progress, no raw ingredients, no pans on a stove.",
+    `Art style: ${STYLE_POSITIVE}.`,
+    `Strictly avoid: ${STYLE_NEGATIVE}.`
+  ].filter(Boolean).join(" ");
+}
+
 // A single comic panel, drawn full-bleed. Panels are generated one per step
 // so each one can fill a phone screen instead of being a third of a strip.
 export function buildPanelPrompt({ recipeTitle, scene, index, total }){

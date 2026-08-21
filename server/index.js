@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import { MAX_STEPS, PANELS_PER_CHUNK, MAX_CHUNKS, normalizeSteps, planChunks } from "./src/chunk.js";
 import { condenseSteps, authorPanels, llmConfigured, llmStatus, LLM_MODEL } from "./src/llm.js";
-import { buildPanelPrompt, seedFor, STYLE_NAME } from "./src/style.js";
+import { buildPanelPrompt, buildCoverPrompt, seedFor, STYLE_NAME } from "./src/style.js";
 import { renderStrip, providerStatus } from "./src/image/index.js";
 import { normalizeRecipe, newId, slugify, CATEGORIES } from "./src/recipe.js";
 import { composeComicSvg, composePanelSvg } from "./src/comic/compose.js";
@@ -158,8 +158,16 @@ async function drawComics(recipe){
     };
   });
 
+  let cover = null;
+  try{
+    cover = await drawCover({ ...recipe, steps: steps.map(step => step.text) });
+  }catch(e){
+    console.error("[cover]", e.message);
+  }
+
   return {
     comics: comics.filter(c => c.panels.length),
+    cover,
     steps,
     plan: {
       submittedSteps: submitted.length,
@@ -170,6 +178,26 @@ async function drawComics(recipe){
       panelsPerChunk: chunks.map(chunk => chunk.steps.length)
     }
   };
+}
+
+// Draws the plated hero shot used on the recipe card.
+async function drawCover(recipe){
+  const finalStep = recipe.steps[recipe.steps.length - 1] || "";
+  const prompt = buildCoverPrompt({
+    recipeTitle: recipe.title,
+    ingredients: recipe.ingredients,
+    finalStep
+  });
+  const image = await renderStrip({
+    prompt, panels: [], recipeTitle: recipe.title,
+    seed: seedFor(`${recipe.title}#cover`)
+  });
+  const id = `${recipe.id}-cover`;
+  await db.putComicImage({
+    id, recipeId: recipe.id, idx: -1,
+    mime: image.mime, base64: image.base64, captions: []
+  });
+  return { url: `/api/images/${id}`, provider: image.provider };
 }
 
 // --- images ----------------------------------------------------------------
@@ -236,6 +264,7 @@ async function persistWithComics(recipe, wantComics){
     recipe.steps = drawn.steps.map(step => step.text);
     recipe.stepTitles = drawn.steps.map(step => step.title || step.text);
     recipe.comics = drawn.comics;
+    if(drawn.cover) recipe.cover = drawn.cover;
     saved = await db.upsertRecipe(recipe);
     return { recipe: saved, plan: drawn.plan };
   }catch(e){
@@ -282,6 +311,15 @@ app.post("/api/parse", wrap(async (req, res) => {
   res.json({ ok: true, recipe: parsed });
 }));
 
+// Redraws just the card cover, without touching the panels.
+app.post("/api/recipes/:id/cover", wrap(async (req, res) => {
+  const existing = await db.getRecipe(req.params.id);
+  if(!existing) return res.status(404).json({ error: "Recipe not found" });
+  existing.cover = await drawCover(existing);
+  const saved = await db.upsertRecipe(existing);
+  res.json({ ok: true, recipe: saved });
+}));
+
 // --- bulk import / export --------------------------------------------------
 
 app.get("/api/export", wrap(async (req, res) => {
@@ -318,6 +356,7 @@ app.post("/api/recipes/:id/comics", wrap(async (req, res) => {
   existing.steps = drawn.steps.map(step => step.text);
   existing.stepTitles = drawn.steps.map(step => step.title || step.text);
   existing.comics = drawn.comics;
+  if(drawn.cover) existing.cover = drawn.cover;
   const saved = await db.upsertRecipe(existing);
   res.json({ ok: true, recipe: saved, plan: drawn.plan });
 }));

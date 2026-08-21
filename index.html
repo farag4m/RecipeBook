@@ -60,6 +60,15 @@
   .search{width:100%;padding:11px 14px;border:3px solid var(--ink);border-radius:8px;font-family:'Comic Neue';font-weight:700;font-size:14px;background:var(--paper-raised);box-shadow:var(--shadow-sm);}
   .search:focus{outline:none;border-color:var(--sage);}
   .grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(240px,1fr));gap:22px;}
+  @media (max-width:760px){
+    .grid{grid-template-columns:1fr 1fr;gap:12px;}
+    .card{border-width:3px;border-radius:12px;}
+    .card h3{font-size:17px;}
+    .card-body{padding:10px 10px 9px;}
+    .card .meta{font-size:10.5px;padding-top:7px;gap:4px;}
+    .card-cat{font-size:10px;padding:1px 8px;top:7px;left:7px;border-width:2px;}
+    .card-cover.blank span{font-size:44px;}
+  }
   .card{background:var(--paper-raised);border:4px solid var(--ink);border-radius:14px;box-shadow:var(--shadow);padding:0;overflow:hidden;position:relative;cursor:pointer;display:flex;flex-direction:column;transition:transform .12s ease, box-shadow .12s ease;}
   .card:hover{transform:translate(-3px,-3px) rotate(-0.6deg);box-shadow:7px 7px 0 var(--ink);}
   .card-cover{position:relative;aspect-ratio:4/3;overflow:hidden;border-bottom:4px solid var(--ink);background:var(--cover-a);}
@@ -333,17 +342,24 @@ function plainStepRow(recipe, idx){
 
 // Comics cover consecutive runs of steps. Each strip is drawn with its panel
 // captions underneath; any step no comic covers falls back to a plain row.
-// A recipe's own first panel makes the card cover; the lettering is dropped
-// so the thumbnail reads as a picture rather than a speech bubble.
+// The card cover uses the LAST panel - the finished dish - not the first,
+// which is raw prep and tells you nothing about what you are cooking. The
+// lettering is dropped so the thumbnail reads as a picture, not dialogue.
 function coverUrl(recipe){
-  const comic = (recipe.comics || [])[0];
-  if(!comic) return null;
-  const panel = (comic.panels || [])[0];
+  // A purpose-drawn hero shot of the plated dish wins when one exists.
+  if(recipe.cover && recipe.cover.url) return apiUrl(recipe.cover.url);
+
+  const comics = (recipe.comics || []).filter(c => c.url || (c.panels || []).length);
+  if(comics.length === 0) return null;
+  const comic = comics[comics.length - 1];
+  const last = Math.max(0, panelCount(comic) - 1);
+
+  const panel = (comic.panels || [])[last];
   if(panel && panel.url) return `${apiUrl(panel.url)}?plain=1`;
   const base = comic.url || "";
   if(!base) return null;
   const abs = /^https?:/i.test(base) ? base : apiUrl(base);
-  return `${abs}${abs.includes("?") ? "&" : "?"}panel=0&plain=1`;
+  return `${abs}${abs.includes("?") ? "&" : "?"}panel=${last}&plain=1`;
 }
 
 function panelUrl(comic, panelIdx){
