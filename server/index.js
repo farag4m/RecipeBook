@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { MAX_STEPS, PANELS_PER_CHUNK, MAX_CHUNKS, normalizeSteps, planChunks } from "./src/chunk.js";
-import { condenseSteps, authorPanels, llmConfigured, LLM_MODEL } from "./src/llm.js";
+import { condenseSteps, authorPanels, llmConfigured, llmStatus, LLM_MODEL } from "./src/llm.js";
 import { buildImagePrompt, seedFor, STYLE_NAME } from "./src/style.js";
 import { renderStrip, providerStatus } from "./src/image/index.js";
 import { normalizeRecipe, newId, slugify, CATEGORIES } from "./src/recipe.js";
@@ -53,7 +53,7 @@ app.get("/api/health", wrap(async (req, res) => {
     ok: true,
     service: "family-recipe-box",
     style: STYLE_NAME,
-    llm: { configured: llmConfigured(), model: LLM_MODEL },
+    llm: { configured: llmConfigured(), ...llmStatus() },
     image: providerStatus(),
     database,
     limits: { maxSteps: MAX_STEPS, panelsPerChunk: PANELS_PER_CHUNK, maxChunks: MAX_CHUNKS },
@@ -244,7 +244,7 @@ app.post("/api/import", wrap(async (req, res) => {
 app.post("/api/recipes/:id/comics", wrap(async (req, res) => {
   const existing = await db.getRecipe(req.params.id);
   if(!existing) return res.status(404).json({ error: "Recipe not found" });
-  if(!llmConfigured()) return res.status(503).json({ error: "OPENROUTER_API_KEY is not configured." });
+  if(!llmConfigured()) return res.status(503).json({ error: "No text model is configured." });
 
   await db.deleteComicImages(req.params.id);
   const drawn = await drawComics(existing);
@@ -278,7 +278,7 @@ async function start(){
   }
   app.listen(port, "0.0.0.0", () => {
     console.log(`[recipe-box] listening on ${port}`);
-    console.log(`[recipe-box] llm=${llmConfigured() ? LLM_MODEL : "off"} image=${providerStatus().active}`);
+    console.log(`[recipe-box] llm=${llmStatus().providers.join(">") || "off"} image=${providerStatus().active}`);
   });
 }
 

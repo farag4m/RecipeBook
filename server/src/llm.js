@@ -6,17 +6,34 @@ import { STYLE_POSITIVE, STYLE_NEGATIVE } from "./style.js";
 import { MAX_STEPS, condenseLocally } from "./chunk.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export const LLM_MODEL = process.env.OPENROUTER_TEXT_MODEL || "google/gemini-2.5-flash";
 
+// Text generation has the same problem the image side does: any one account
+// can run out of credit. Providers are tried in order until one answers.
+function textProviders(){
+  const list = [];
+  if(process.env.OPENROUTER_API_KEY) list.push({ name: "openrouter", call: viaOpenRouter });
+  if(process.env.GEMINI_API_KEY)     list.push({ name: "gemini",     call: viaGemini });
+  if(process.env.GROQ_API_KEY)       list.push({ name: "groq",       call: viaGroq });
+  return list;
+}
+
 export function llmConfigured(){
-  return Boolean(process.env.OPENROUTER_API_KEY);
+  return textProviders().length > 0;
+}
+
+export function llmStatus(){
+  return {
+    model: LLM_MODEL,
+    providers: textProviders().map(p => p.name),
+    active: textProviders()[0]?.name || null
+  };
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// OpenRouter rate-limits and, on a low balance, rejects requests whose
-// max_tokens it cannot cover - so max_tokens is always sent explicitly.
 function retryDelayMs(status, headers, body, attempt){
   if(status === 429){
     const fromBody = /try again in ([\d.]+)s/i.exec(body || "");
@@ -27,49 +44,125 @@ function retryDelayMs(status, headers, body, attempt){
   return Math.min(8000, 700 * 2 ** attempt);
 }
 
-export async function llmJson(messages, { maxTokens = 1400, temperature = 0.55 } = {}){
-  const key = process.env.OPENROUTER_API_KEY;
-  if(!key) throw new Error("OPENROUTER_API_KEY is not set");
+// A 402/401/403 means this account is out - move to the next provider rather
+// than burning retries on it.
+function isTerminal(status){
+  return status === 401 || status === 402 || status === 403 || status === 404;
+}
 
-  const maxAttempts = Number(process.env.LLM_MAX_ATTEMPTS || 5);
-  let lastError = "";
+async function postJson(url, headers, body, timeoutMs){
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+}
 
-  for(let attempt = 0; attempt < maxAttempts; attempt++){
-    const res = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.PUBLIC_URL || "https://family-recipe-box.onrender.com",
-        "X-Title": "The Family Recipe Box"
-      },
-      body: JSON.stringify({
-        model: LLM_MODEL,
+async function viaOpenRouter(messages, { maxTokens, temperature, timeoutMs }){
+  const res = await postJson(OPENROUTER_URL, {
+    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    "HTTP-Referer": process.env.PUBLIC_URL || "https://family-recipe-box.onrender.com",
+    "X-Title": "The Family Recipe Box"
+  }, {
+    model: LLM_MODEL,
+    temperature,
+    // Sent explicitly: OpenRouter rejects requests whose default token
+    // ceiling exceeds what the account balance can cover.
+    max_tokens: maxTokens,
+    response_format: { type: "json_object" },
+    messages
+  }, timeoutMs);
+  return { res, read: data => data?.choices?.[0]?.message?.content || "" };
+}
+
+async function viaGroq(messages, { maxTokens, temperature, timeoutMs }){
+  const res = await postJson(GROQ_URL, {
+    Authorization: `Bearer ${process.env.GROQ_API_KEY}`
+  }, {
+    model: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
+    temperature,
+    max_completion_tokens: maxTokens,
+    response_format: { type: "json_object" },
+    messages
+  }, timeoutMs);
+  return { res, read: data => data?.choices?.[0]?.message?.content || "" };
+}
+
+// Gemini's own API takes a different shape: system text is hoisted out of the
+// message list and JSON mode is a generationConfig flag.
+async function viaGemini(messages, { maxTokens, temperature, timeoutMs }){
+  const model = process.env.GEMINI_TEXT_MODEL || "gemini-3.6-flash";
+  const system = messages.filter(m => m.role === "system").map(m => m.content).join("\n\n");
+  const contents = messages
+    .filter(m => m.role !== "system")
+    .map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+
+  const res = await postJson(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    { "x-goog-api-key": process.env.GEMINI_API_KEY },
+    {
+      contents,
+      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+      generationConfig: {
         temperature,
-        max_tokens: maxTokens,
-        response_format: { type: "json_object" },
-        messages
-      }),
-      signal: AbortSignal.timeout(Number(process.env.LLM_TIMEOUT_MS || 90000))
-    });
+        maxOutputTokens: maxTokens,
+        responseMimeType: "application/json"
+      }
+    },
+    timeoutMs
+  );
+  return {
+    res,
+    read: data => (data?.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("")
+  };
+}
 
-    if(res.ok){
-      const data = await res.json();
-      if(data.error) throw new Error(`OpenRouter: ${JSON.stringify(data.error).slice(0, 300)}`);
-      const content = data?.choices?.[0]?.message?.content || "";
-      return parseJsonLoose(content);
+export async function llmJson(messages, { maxTokens = 1400, temperature = 0.55 } = {}){
+  const providers = textProviders();
+  if(providers.length === 0) throw new Error("No text model is configured");
+
+  const timeoutMs = Number(process.env.LLM_TIMEOUT_MS || 90000);
+  const maxAttempts = Number(process.env.LLM_MAX_ATTEMPTS || 4);
+  const failures = [];
+
+  for(const provider of providers){
+    let lastError = "";
+    for(let attempt = 0; attempt < maxAttempts; attempt++){
+      let res, read;
+      try{
+        ({ res, read } = await provider.call(messages, { maxTokens, temperature, timeoutMs }));
+      }catch(e){
+        lastError = `${provider.name}: ${e.message}`;
+        break;
+      }
+
+      if(res.ok){
+        const data = await res.json();
+        if(data.error){
+          lastError = `${provider.name}: ${JSON.stringify(data.error).slice(0, 200)}`;
+          break;
+        }
+        try{
+          return parseJsonLoose(read(data));
+        }catch(e){
+          lastError = `${provider.name}: ${e.message}`;
+          break;
+        }
+      }
+
+      const detail = await res.text().catch(() => "");
+      lastError = `${provider.name} ${res.status}: ${detail.slice(0, 200)}`;
+      if(isTerminal(res.status)) break;
+      if(res.status !== 429 && res.status < 500) break;
+      if(attempt === maxAttempts - 1) break;
+      await sleep(retryDelayMs(res.status, res.headers, detail, attempt));
     }
-
-    const detail = await res.text().catch(() => "");
-    lastError = `OpenRouter ${res.status}: ${detail.slice(0, 300)}`;
-
-    // 4xx other than rate limiting will not improve on retry.
-    if(res.status !== 429 && res.status < 500) throw new Error(lastError);
-    if(attempt === maxAttempts - 1) break;
-    await sleep(retryDelayMs(res.status, res.headers, detail, attempt));
+    failures.push(lastError);
+    console.error(`[llm] ${lastError} - trying next provider`);
   }
 
-  throw new Error(lastError || "OpenRouter request failed");
+  throw new Error(`All text providers failed: ${failures.join(" | ")}`);
 }
 
 // Models occasionally wrap JSON in prose or fences; recover the object.
